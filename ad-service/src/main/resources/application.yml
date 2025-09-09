@@ -1,0 +1,69 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: ad-service
+  r2dbc:
+    url: r2dbc:postgresql://postgres:5432/${POSTGRES_DB_AD:ad_service_db}
+    username: ${POSTGRES_USER:postgres}
+    password: ${POSTGRES_PASSWORD:password}
+    pool:
+      initial-size: 10
+      max-size: 20
+      max-idle-time: 30m
+      validation-query: SELECT 1
+  sql:
+    init:
+      schema-locations: classpath:schema.sql
+      mode: never
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    url: jdbc:postgresql://postgres:5432/${POSTGRES_DB_AD:ad_service_db}
+    user: ${POSTGRES_USER:postgres}
+    password: ${POSTGRES_PASSWORD:password}
+    baseline-on-migrate: true
+  cache:
+    type: simple
+    cache-names: brandsByCategory,allActiveBrands,brandsGroupedByCategory
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI}
+
+keycloak:
+  auth-server-url: ${KEYCLOAK_URL}
+  realm: ${KEYCLOAK_REALM}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+
+services:
+  auth-service:
+    url: ${SERVICES_AUTH_SERVICE_URL}
+
+aws:
+  s3:
+    access-key: ${AWS_S3_ACCESS_KEY}
+    secret-key: ${AWS_S3_SECRET_KEY}
+    region: ${AWS_S3_REGION:eu-central-1}
+    bucket-name: ${AWS_S3_BUCKET_NAME}
+    base-url: ${AWS_S3_BASE_URL}
+
+logging:
+  level:
+    com.platform.ads.service.BrandService: INFO
+    com.platform.ads.controller.BrandController: INFO

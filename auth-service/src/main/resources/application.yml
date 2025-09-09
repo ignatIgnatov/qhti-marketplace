@@ -1,0 +1,28 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: auth-service
+  config:
+    activate:
+      on-profile: docker
+
+keycloak:
+  auth-server-url: ${KEYCLOAK_URL}
+  realm: ${KEYCLOAK_REALM}
+  resource: ${KEYCLOAK_CLIENT_ID}
+  public-client: false
+  credentials:
+    secret: ${KEYCLOAK_CLIENT_SECRET}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+
+frontend:
+  url: ${FRONTEND_URL:localhost:3000}
