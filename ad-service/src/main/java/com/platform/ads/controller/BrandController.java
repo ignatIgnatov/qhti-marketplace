@@ -20,7 +20,6 @@ import reactor.core.publisher.Mono;
 @RestController
 @RequestMapping("/ads/brands")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
 @Tag(name = "Brands", description = "Boat, yacht, and kayak brand management API")
 public class BrandController {
 

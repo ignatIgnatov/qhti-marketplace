@@ -52,7 +52,6 @@ import java.util.List;
 @Slf4j
 @RestController
 @RequestMapping("/ads")
-@CrossOrigin(origins = "*")
 @RequiredArgsConstructor
 @Validated
 @Tag(name = "Boat Marketplace", description = "QHTI.BG Boat Marketplace API for managing and searching boat advertisements across all categories")
