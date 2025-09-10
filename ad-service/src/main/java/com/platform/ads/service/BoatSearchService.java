@@ -74,7 +74,7 @@ public class BoatSearchService {
         // Step 3: Map to response and sort
         return filteredAds
                 .flatMap(ad -> {
-                    log.debug("=== MAPPING RESULT === AdID: {}, Title: '{}' ===", ad.getId(), ad.getTitle());
+                    log.debug("=== MAPPING RESULT === AdID: {} ===", ad.getId());
                     return marketplaceService.mapToResponse(ad);
                 })
                 .sort((ad1, ad2) -> applySorting(ad1, ad2, searchRequest.getSortBy()))

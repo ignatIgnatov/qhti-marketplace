@@ -72,6 +72,7 @@ import com.platform.ads.repository.RentalsSpecificationRepository;
 import com.platform.ads.repository.ServicesSpecificationRepository;
 import com.platform.ads.repository.TrailerSpecificationRepository;
 import com.platform.ads.repository.WaterSportsSpecificationRepository;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.buffer.DataBuffer;
@@ -103,6 +104,7 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class BoatMarketplaceService {
 
     @Value("${services.auth-service.url}")
@@ -140,43 +142,6 @@ public class BoatMarketplaceService {
     private final MarineAccessoriesSpecificationRepository marineAccessoriesSpecRepository;
     private final RentalsSpecificationRepository rentalsSpecRepository;
     private final WebClient webClient;
-
-    public BoatMarketplaceService(
-            AdRepository adRepository,
-            BoatSpecificationRepository boatSpecRepository,
-            JetSkiSpecificationRepository jetSkiSpecRepository,
-            TrailerSpecificationRepository trailerSpecRepository,
-            EngineSpecificationRepository engineSpecRepository,
-            MarineElectronicsSpecificationRepository marineElectronicsSpecRepository,
-            FishingSpecificationRepository fishingSpecRepository,
-            PartsSpecificationRepository partsSpecRepository,
-            ServicesSpecificationRepository servicesSpecRepository,
-            BoatInteriorFeatureRepository interiorFeatureRepository,
-            BoatExteriorFeatureRepository exteriorFeatureRepository,
-            BoatEquipmentRepository equipmentRepository, AdImageRepository adImageRepository, S3Client s3Client,
-            BrandService brandService, ImageConversionService imageConversionService, WaterSportsSpecificationRepository waterSportsSpecRepository, MarineAccessoriesSpecificationRepository marineAccessoriesSpecRepository, RentalsSpecificationRepository rentalsSpecRepository,
-            WebClient webClient) {
-        this.adRepository = adRepository;
-        this.boatSpecRepository = boatSpecRepository;
-        this.jetSkiSpecRepository = jetSkiSpecRepository;
-        this.trailerSpecRepository = trailerSpecRepository;
-        this.engineSpecRepository = engineSpecRepository;
-        this.marineElectronicsSpecRepository = marineElectronicsSpecRepository;
-        this.fishingSpecRepository = fishingSpecRepository;
-        this.partsSpecRepository = partsSpecRepository;
-        this.servicesSpecRepository = servicesSpecRepository;
-        this.interiorFeatureRepository = interiorFeatureRepository;
-        this.exteriorFeatureRepository = exteriorFeatureRepository;
-        this.equipmentRepository = equipmentRepository;
-        this.adImageRepository = adImageRepository;
-        this.s3Client = s3Client;
-        this.brandService = brandService;
-        this.imageConversionService = imageConversionService;
-        this.waterSportsSpecRepository = waterSportsSpecRepository;
-        this.marineAccessoriesSpecRepository = marineAccessoriesSpecRepository;
-        this.rentalsSpecRepository = rentalsSpecRepository;
-        this.webClient = webClient;
-    }
 
     // ===========================
     // AD CREATION
@@ -339,9 +304,9 @@ public class BoatMarketplaceService {
         // Update the main ad entity
         Ad updatedAd = Ad.builder()
                 .id(existingAd.getId())
-//                .title(request.getTitle())
+//                .title("")
                 .description(request.getDescription())
-//                .quickDescription(request.getQuickDescription())
+//                .quickDescription("")
                 .category(request.getCategory().name())
                 .priceAmount(request.getPrice() != null ? request.getPrice().getAmount() : null)
                 .priceType(request.getPrice() != null ? request.getPrice().getType().name() : null)
@@ -699,9 +664,9 @@ public class BoatMarketplaceService {
                                                         List<ValidatedImageData> images) {
         // Create main ad
         Ad ad = Ad.builder()
-//                .title(request.getTitle())
+//                .title("")
                 .description(request.getDescription())
-//                .quickDescription(request.getQuickDescription())
+//                .quickDescription("")
                 .category(request.getCategory().name())
                 .priceAmount(request.getPrice() != null ? request.getPrice().getAmount() : null)
                 .priceType(request.getPrice() != null ? request.getPrice().getType().name() : null)

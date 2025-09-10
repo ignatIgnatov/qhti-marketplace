@@ -271,6 +271,86 @@ public class ImageService {
         });
     }
 
+    @Transactional
+    public Mono<Void> setMainImage(String userId, Long adId, Long imageId) {
+        long startTime = System.currentTimeMillis();
+        log.info("=== SET MAIN IMAGE START === UserId: {}, AdID: {}, ImageID: {} ===",
+                userId, adId, imageId);
+
+        return validateAdOwnership(userId, adId)
+                .then(validateImageOwnership(imageId, adId))
+                .then(promoteImageToMain(adId, imageId))
+                .doOnSuccess(result -> {
+                    long duration = System.currentTimeMillis() - startTime;
+                    log.info("=== SET MAIN IMAGE SUCCESS === UserId: {}, AdID: {}, ImageID: {}, Duration: {}ms ===",
+                            userId, adId, imageId, duration);
+                })
+                .doOnError(error -> {
+                    long duration = System.currentTimeMillis() - startTime;
+                    log.error("=== SET MAIN IMAGE ERROR === UserId: {}, AdID: {}, ImageID: {}, Duration: {}ms, Error: {} ===",
+                            userId, adId, imageId, duration, error.getMessage());
+                });
+    }
+
+    private Mono<Void> validateImageOwnership(Long imageId, Long adId) {
+        return imageRepository.findById(imageId)
+                .switchIfEmpty(Mono.error(new IllegalArgumentException("Image not found")))
+                .flatMap(image -> {
+                    if (!image.getAdId().equals(adId)) {
+                        return Mono.error(new IllegalArgumentException("Image does not belong to this ad"));
+                    }
+                    return Mono.empty();
+                });
+    }
+
+    private Mono<Void> promoteImageToMain(Long adId, Long targetImageId) {
+        log.info("=== PROMOTING IMAGE TO MAIN === AdID: {}, TargetImageID: {} ===", adId, targetImageId);
+
+        return imageRepository.findByAdIdOrderByDisplayOrder(adId)
+                .collectList()
+                .flatMap(images -> {
+                    if (images.isEmpty()) {
+                        return Mono.error(new IllegalArgumentException("No images found for ad"));
+                    }
+
+                    // Find the target image and current main image
+                    AdImage targetImage = null;
+                    AdImage currentMainImage = null;
+
+                    for (AdImage image : images) {
+                        if (image.getId().equals(targetImageId)) {
+                            targetImage = image;
+                        }
+                        if (image.getDisplayOrder() == 0) {
+                            currentMainImage = image;
+                        }
+                    }
+
+                    if (targetImage == null) {
+                        return Mono.error(new IllegalArgumentException("Target image not found"));
+                    }
+
+                    // If target is already main, do nothing
+                    if (targetImage.getDisplayOrder() == 0) {
+                        log.info("=== IMAGE ALREADY MAIN === ImageID: {} ===", targetImageId);
+                        return Mono.empty();
+                    }
+
+                    // Swap display orders
+                    Mono<Void> setTargetAsMain = imageRepository.updateDisplayOrder(targetImageId, 0);
+
+                    Mono<Void> updateFormerMain = Mono.empty();
+                    if (currentMainImage != null) {
+                        updateFormerMain = imageRepository.updateDisplayOrder(
+                                currentMainImage.getId(),
+                                targetImage.getDisplayOrder()
+                        );
+                    }
+
+                    return Mono.when(setTargetAsMain, updateFormerMain);
+                });
+    }
+
     // ===========================
     // HELPER METHODS
     // ===========================

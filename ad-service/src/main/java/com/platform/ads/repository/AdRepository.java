@@ -156,7 +156,7 @@ public interface AdRepository extends ReactiveCrudRepository<Ad, Long> {
         WHERE id = :adId AND user_id = :userId
         """)
     Mono<Void> updateAdBasicInfo(
-            Long adId, String userId, String title, String description, String quickDescription,
+            Long adId, String userId, String description,
             BigDecimal priceAmount, String priceType, Boolean includingVat, String location,
             LocalDateTime updatedAt, LocalDateTime lastEditedAt
     );

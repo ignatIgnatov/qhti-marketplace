@@ -38,8 +38,8 @@ public class BoatMarketplaceAdminService {
         return adRepository.findById(adId)
                 .switchIfEmpty(Mono.error(new AdNotFoundException(adId)))
                 .flatMap(ad -> {
-                    log.info("=== ADMIN FORCE DELETING === AdID: {}, Title: '{}', Owner: {} ===",
-                            adId, ad.getTitle(), ad.getUserId());
+                    log.info("=== ADMIN FORCE DELETING === AdID: {}, Owner: {} ===",
+                            adId, ad.getUserId());
 
                     // Admin can delete any ad regardless of view count
                     return deleteAllAdImagesComplete(adId)
@@ -72,8 +72,8 @@ public class BoatMarketplaceAdminService {
         log.info("=== ADMIN SERVICE: GET PENDING APPROVAL ADS START ===");
 
         return adRepository.findByApprovalStatus("PENDING")
-                .doOnNext(ad -> log.debug("=== PENDING AD FOUND === AdID: {}, Title: '{}', Created: {} ===",
-                        ad.getId(), ad.getTitle(), ad.getCreatedAt()))
+                .doOnNext(ad -> log.debug("=== PENDING AD FOUND === AdID: {}, Created: {} ===",
+                        ad.getId(),  ad.getCreatedAt()))
                 .flatMap(ad -> {
                     log.debug("=== MAPPING PENDING AD === AdID: {} ===", ad.getId());
                     return marketplaceService.mapToResponse(ad);

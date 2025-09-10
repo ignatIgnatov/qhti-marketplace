@@ -18,9 +18,9 @@ import java.time.LocalDateTime;
 public class Ad {
     @Id
     private Long id;
-    private String title;
+//    private String title;
     private String description;
-    private String quickDescription;
+//    private String quickDescription;
     private String category;
     private BigDecimal priceAmount;
     private String priceType;

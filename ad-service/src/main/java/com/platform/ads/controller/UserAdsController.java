@@ -172,8 +172,8 @@ public class UserAdsController {
 
         String userId = authentication.getName();
         long startTime = System.currentTimeMillis();
-        log.info("=== UPDATE MY AD REQUEST === UserId: {}, AdID: {}, NewTitle: '{}' ===",
-                userId, adId, updateRequest.getTitle());
+        log.info("=== UPDATE MY AD REQUEST === UserId: {}, AdID: {} ===",
+                userId, adId);
 
         return userAdsService.updateAd(userId, adId, updateRequest)
                 .map(response -> {

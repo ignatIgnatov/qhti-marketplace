@@ -36,8 +36,8 @@ public class UserAdsService {
         log.info("=== GET USER ADS START === UserId: {} ===", userId);
 
         return adRepository.findByUserId(userId)
-                .doOnNext(ad -> log.debug("=== USER AD FOUND === AdID: {}, Title: '{}', Active: {} ===",
-                        ad.getId(), ad.getTitle(), ad.getActive()))
+                .doOnNext(ad -> log.debug("=== USER AD FOUND === AdID: {}, Active: {} ===",
+                        ad.getId(), ad.getActive()))
                 .flatMap(ad -> {
                     log.debug("=== MAPPING USER AD === AdID: {} ===", ad.getId());
                     return marketplaceService.mapToResponse(ad);
@@ -186,8 +186,8 @@ public class UserAdsService {
     @Transactional
     public Mono<BoatAdResponse> updateAd(String userId, Long adId, UpdateAdRequest updateRequest) {
         long startTime = System.currentTimeMillis();
-        log.info("=== UPDATE AD START === UserId: {}, AdID: {}, Title: '{}' ===",
-                userId, adId, updateRequest.getTitle());
+        log.info("=== UPDATE AD START === UserId: {}, AdID: {} ===",
+                userId, adId);
 
         return validateAdOwnership(userId, adId)
                 .flatMap(ad -> {
@@ -197,15 +197,15 @@ public class UserAdsService {
                         return Mono.error(new IllegalStateException("Cannot edit archived advertisement"));
                     }
 
-                    log.info("=== UPDATING AD BASIC INFO === AdID: {}, OldTitle: '{}', NewTitle: '{}' ===",
-                            adId, ad.getTitle(), updateRequest.getTitle());
+                    log.info("=== UPDATING AD BASIC INFO === AdID: {} ===",
+                            adId);
 
                     LocalDateTime now = LocalDateTime.now();
                     return adRepository.updateAdBasicInfo(
                             adId, userId,
-                            updateRequest.getTitle(),
+//                            updateRequest.getTitle(),
                             updateRequest.getDescription(),
-                            updateRequest.getQuickDescription(),
+//                            updateRequest.getQuickDescription(),
                             updateRequest.getPrice() != null ? updateRequest.getPrice().getAmount() : null,
                             updateRequest.getPrice() != null ? updateRequest.getPrice().getType().name() : null,
                             updateRequest.getPrice() != null ? updateRequest.getPrice().getIncludingVat() : null,
@@ -244,7 +244,7 @@ public class UserAdsService {
                     }
 
                     LocalDateTime now = LocalDateTime.now();
-                    log.info("=== ARCHIVING AD (IMAGES REMAIN) === AdID: {}, Title: '{}' ===", adId, ad.getTitle());
+                    log.info("=== ARCHIVING AD (IMAGES REMAIN) === AdID: {} ===", adId);
 
                     // Note: When archiving, we keep images in S3 and database
                     // They're just not visible to public because ad is archived
@@ -270,7 +270,7 @@ public class UserAdsService {
                         return Mono.error(new IllegalStateException("Advertisement is not archived"));
                     }
 
-                    log.info("=== UNARCHIVING AD === AdID: {}, Title: '{}' ===", adId, ad.getTitle());
+                    log.info("=== UNARCHIVING AD === AdID: {} ===", adId);
                     return adRepository.unarchiveAd(adId, userId, LocalDateTime.now());
                 })
                 .doOnSuccess(result -> {
@@ -299,8 +299,8 @@ public class UserAdsService {
                                 "Cannot delete advertisement with high interaction. Consider archiving instead."));
                     }
 
-                    log.info("=== STARTING COMPLETE AD DELETION === AdID: {}, Title: '{}', Views: {} ===",
-                            adId, ad.getTitle(), ad.getViewsCount());
+                    log.info("=== STARTING COMPLETE AD DELETION === AdID: {}, Views: {} ===",
+                            adId, ad.getViewsCount());
 
                     // Step 1: Delete all images from S3 and database
                     return deleteAllAdImagesComplete(adId)
@@ -352,8 +352,8 @@ public class UserAdsService {
         log.info("=== GET ARCHIVED ADS === UserId: {} ===", userId);
 
         return adRepository.findArchivedByUserId(userId)
-                .doOnNext(ad -> log.debug("=== ARCHIVED AD FOUND === AdID: {}, Title: '{}', ArchivedAt: {} ===",
-                        ad.getId(), ad.getTitle(), ad.getArchivedAt()))
+                .doOnNext(ad -> log.debug("=== ARCHIVED AD FOUND === AdID: {}, ArchivedAt: {} ===",
+                        ad.getId(), ad.getArchivedAt()))
                 .flatMap(marketplaceService::mapToResponse)
                 .doOnComplete(() -> {
                     long duration = System.currentTimeMillis() - startTime;

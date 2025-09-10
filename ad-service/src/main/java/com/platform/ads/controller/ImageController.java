@@ -151,6 +151,20 @@ public class ImageController {
                 });
     }
 
+    @PutMapping("/{adId}/images/{imageId}/set-main")
+    public Mono<ResponseEntity<Void>> setMainImage(
+            @PathVariable Long adId,
+            @PathVariable Long imageId,
+            Authentication authentication) {
+
+        String userId = authentication.getName();
+        log.info("=== SET MAIN IMAGE REQUEST === UserId: {}, AdID: {}, ImageId: {} ===", userId, adId, imageId);
+
+        return imageService.setMainImage(userId, adId, imageId)
+                .then(Mono.just(ResponseEntity.ok().<Void>build()))
+                .onErrorReturn(ResponseEntity.badRequest().build());
+    }
+
     @PutMapping("/{adId}/reorder")
     @Operation(
             summary = "Reorder advertisement images",

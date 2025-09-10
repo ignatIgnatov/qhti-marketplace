@@ -163,9 +163,9 @@ public class AdRepositoryCustomImpl {
     private Ad mapRowToAd(Row row) {
         return Ad.builder()
                 .id(row.get("id", Long.class))
-                .title(row.get("title", String.class))
+//                .title(row.get("title", String.class))
                 .description(row.get("description", String.class))
-                .quickDescription(row.get("quick_description", String.class))
+//                .quickDescription(row.get("quick_description", String.class))
                 .category(row.get("category", String.class))
                 .priceAmount(row.get("price_amount", BigDecimal.class))
                 .priceType(row.get("price_type", String.class))

@@ -3,6 +3,7 @@ package com.platform.ads.dto;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.platform.ads.dto.enums.AdType;
 import com.platform.ads.dto.enums.MainBoatCategory;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -34,6 +35,8 @@ public class BoatAdRequest {
     @Size(max = 200, message = "Location cannot exceed 200 characters")
     private String location;
 
+    @NotBlank(message = "Email is required")
+    @Email
     private String userEmail;
 
     @Size(max = 100, message = "Contact person name cannot exceed 100 characters")
@@ -43,6 +46,10 @@ public class BoatAdRequest {
     private String contactPhone;
 
     private List<Long> imagesToDelete;
+
+    @NotBlank(message = "Description is required")
+    @Size(min = 20, max = 2000, message = "Description must be between 20 and 2000 characters")
+    private String description;
 
     private BoatSpecificationDto boatSpec;
     private JetSkiSpecificationDto jetSkiSpec;
@@ -56,10 +63,6 @@ public class BoatAdRequest {
     private WaterSportsSpecificationDto waterSportsSpec;
     private MarineAccessoriesSpecificationDto marineAccessoriesSpec;
     private RentalsSpecificationDto rentalsSpec;
-
-    @NotBlank(message = "Description is required")
-    @Size(min = 20, max = 2000, message = "Description must be between 20 and 2000 characters")
-    private String description;
 
 //    @Size(min = 5, max = 30, message = "Title must be between 5 and 30 characters")
 //    private String title;
