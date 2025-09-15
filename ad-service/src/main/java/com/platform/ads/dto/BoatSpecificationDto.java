@@ -69,9 +69,6 @@ public class BoatSpecificationDto {
     @DecimalMax(value = "50.0", message = "Draft cannot exceed 50m")
     private BigDecimal draft;
 
-    @NotNull(message = "Max people is required")
-    @Min(value = 1, message = "Max people must be at least 1")
-    @Max(value = 1000, message = "Max people cannot exceed 1000")
     private Integer maxPeople;
 
     @NotNull(message = "Year is required")

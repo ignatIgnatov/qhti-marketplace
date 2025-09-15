@@ -33,7 +33,6 @@ public class BoatSpecification {
     @Column("model")
     private String model;
 
-    // NEW FIELD
     @Column("boat_purpose")
     private String boatPurpose;
 

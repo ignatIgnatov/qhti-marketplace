@@ -68,7 +68,6 @@ public class GlobalExceptionHandler implements ErrorWebExceptionHandler {
                 .error(getErrorMessage(status))
                 .path(path);
 
-        // Handle specific exceptions
         if (ex instanceof BusinessException businessEx) {
             builder.message(businessEx.getMessage())
                     .status(businessEx.getStatus().value())
@@ -224,7 +223,7 @@ public class GlobalExceptionHandler implements ErrorWebExceptionHandler {
     }
 
     private void logException(Throwable ex, HttpStatus status) {
-        String requestId = "REQ-" + System.currentTimeMillis(); // Simple request ID
+        String requestId = "REQ-" + System.currentTimeMillis();
 
         if (status.is5xxServerError()) {
             log.error("[{}] Server error occurred: {} - {}", requestId, status, ex.getMessage(), ex);
@@ -256,7 +255,6 @@ public class GlobalExceptionHandler implements ErrorWebExceptionHandler {
                 validationErrors.put(error.getField(), error.getDefaultMessage())
         );
 
-        // Логване на всички грешки
         if (log.isWarnEnabled()) {
             StringBuilder errorLog = new StringBuilder("Validation errors: ");
             validationErrors.forEach((field, error) ->

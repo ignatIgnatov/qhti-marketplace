@@ -87,14 +87,9 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
-
-// New Entities
 import com.platform.ads.entity.MarineAccessoriesSpecification;
 
-// New Repositories (you'll need to create these)
-
 import java.math.BigDecimal;
-import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Arrays;
@@ -141,7 +136,6 @@ public class BoatMarketplaceService {
     private final WaterSportsSpecificationRepository waterSportsSpecRepository;
     private final MarineAccessoriesSpecificationRepository marineAccessoriesSpecRepository;
     private final RentalsSpecificationRepository rentalsSpecRepository;
-    private final WebClient webClient;
 
     // ===========================
     // AD CREATION
@@ -168,26 +162,37 @@ public class BoatMarketplaceService {
 
                     log.info("=== IMAGES VALIDATED === Count: {}, User: {} ===", imageList.size(), request.getUserEmail());
 
+                    // WITHOUT EMAIL VALIDATION
                     return validateCategorySpecificFieldsAsync(request)
-                            .then(validateUser(request.getUserEmail(), token))
-                            .flatMap(userInfo -> {
-                                if (!userInfo.isExists()) {
-                                    log.warn("=== USER NOT FOUND === Email: {} ===", request.getUserEmail());
-                                    return Mono.error(new UserNotFoundException(request.getUserEmail()));
-                                }
-
-                                log.info("=== USER VALIDATED === Email: {}, UserID: {}, Name: {} {} ===",
-                                        request.getUserEmail(), userInfo.getUserId(),
-                                        userInfo.getFirstName(), userInfo.getLastName());
-
-                                return createAdWithSpecificationAndImages(request, userInfo, imageList)
-                                        .flatMap(ad -> {
-                                            long duration = System.currentTimeMillis() - startTime;
-                                            log.info("=== AD AND IMAGES CREATED === ID: {}, Duration: {}ms ===",
-                                                    ad.getId(), duration);
-                                            return this.mapToResponse(ad);
-                                        });
+                            .then(createAdWithSpecificationAndImages(request, null, imageList)) // без user info
+                            .flatMap(ad -> {
+                                long duration = System.currentTimeMillis() - startTime;
+                                log.info("=== AD AND IMAGES CREATED === ID: {}, Duration: {}ms ===",
+                                        ad.getId(), duration);
+                                return this.mapToResponse(ad);
                             });
+
+                    //WITH EMAIL VALIDATION
+//                    return validateCategorySpecificFieldsAsync(request)
+//                            .then(validateUser(request.getUserEmail(), token))
+//                            .flatMap(userInfo -> {
+//                                if (!userInfo.isExists()) {
+//                                    log.warn("=== USER NOT FOUND === Email: {} ===", request.getUserEmail());
+//                                    return Mono.error(new UserNotFoundException(request.getUserEmail()));
+//                                }
+//
+//                                log.info("=== USER VALIDATED === Email: {}, UserID: {}, Name: {} {} ===",
+//                                        request.getUserEmail(), userInfo.getUserId(),
+//                                        userInfo.getFirstName(), userInfo.getLastName());
+//
+//                                return createAdWithSpecificationAndImages(request, userInfo, imageList)
+//                                        .flatMap(ad -> {
+//                                            long duration = System.currentTimeMillis() - startTime;
+//                                            log.info("=== AD AND IMAGES CREATED === ID: {}, Duration: {}ms ===",
+//                                                    ad.getId(), duration);
+//                                            return this.mapToResponse(ad);
+//                                        });
+//                            });
                 })
                 .doOnSuccess(response -> {
                     long duration = System.currentTimeMillis() - startTime;
@@ -198,47 +203,6 @@ public class BoatMarketplaceService {
                     long duration = System.currentTimeMillis() - startTime;
                     log.error("=== CREATE BOAT AD WITH IMAGES FAILED === Category: {}, User: {}, Duration: {}ms, Error: {} ===",
                             request.getCategory(), request.getUserEmail(), duration, error.getMessage());
-                });
-    }
-
-    // ===========================
-    // IMAGE VALIDATION
-    // ===========================
-    private Mono<List<ValidatedImageData>> validateImagesFirst(Flux<FilePart> images) {
-        log.debug("=== VALIDATING IMAGES ===");
-
-        return images.flatMap(this::validateAndProcessImage)
-                .collectList()
-                .doOnNext(imageList -> log.info("=== IMAGES VALIDATION COMPLETE === Count: {} ===", imageList.size()));
-    }
-
-    private Mono<ValidatedImageData> validateAndProcessImage(FilePart filePart) {
-        String originalFileName = filePart.filename();
-        String contentType = filePart.headers().getContentType() != null ?
-                filePart.headers().getContentType().toString() : "";
-
-        if (!imageConversionService.isFormatSupported(contentType)) {
-            return Mono.error(new InvalidFieldValueException("image",
-                    "Unsupported format for '" + originalFileName + "'. Supported: JPG, PNG, WebP, HEIC"));
-        }
-
-        return filePart.content()
-                .collectList()
-                .map(this::collectDataBufferBytes)
-                .flatMap(bytes -> {
-                    if (bytes.length > MAX_FILE_SIZE) {
-                        return Mono.error(new InvalidFieldValueException("image",
-                                "File too large: " + originalFileName));
-                    }
-
-                    return imageConversionService.convertToWebP(bytes, originalFileName, contentType)
-                            .map(converted -> ValidatedImageData.builder()
-                                    .originalFileName(originalFileName)
-                                    .contentType("image/webp")
-                                    .bytes(converted.getConvertedBytes())
-                                    .width(converted.getWidth())
-                                    .height(converted.getHeight())
-                                    .build());
                 });
     }
 
@@ -259,21 +223,30 @@ public class BoatMarketplaceService {
         log.info("=== UPDATE BOAT AD WITH IMAGES START === AdID: {}, Category: {}, User: {} ===",
                 adId, request.getCategory(), request.getUserEmail());
 
-        return validateUser(request.getUserEmail(), token)
-                .flatMap(userInfo -> {
-                    if (!userInfo.isExists()) {
-                        return Mono.error(new UserNotFoundException(request.getUserEmail()));
-                    }
+        //WITHOUT USER VALIDATION
+        return adRepository.findById(adId)
+                .switchIfEmpty(Mono.error(new AdNotFoundException(adId)))
+                .flatMap(existingAd ->
+                        validateCategorySpecificFieldsAsync(request)
+                                .then(processAdUpdateWithImages(adId, existingAd, request, null, newImages, imagesToDelete))
+                )
 
-                    return adRepository.findById(adId)
-                            .switchIfEmpty(Mono.error(new AdNotFoundException(adId)))
-                            .filter(ad -> userInfo.getUserId().equals(ad.getUserId()))
-                            .switchIfEmpty(Mono.error(new IllegalArgumentException("Advertisement not owned by user")))
-                            .flatMap(existingAd ->
-                                    validateCategorySpecificFieldsAsync(request)
-                                            .then(processAdUpdateWithImages(adId, existingAd, request, userInfo, newImages, imagesToDelete))
-                            );
-                })
+        // WITH USER VALIDATION
+//        return validateUser(request.getUserEmail(), token)
+//                .flatMap(userInfo -> {
+//                    if (!userInfo.isExists()) {
+//                        return Mono.error(new UserNotFoundException(request.getUserEmail()));
+//                    }
+//
+//                    return adRepository.findById(adId)
+//                            .switchIfEmpty(Mono.error(new AdNotFoundException(adId)))
+//                            .filter(ad -> userInfo.getUserId().equals(ad.getUserId()))
+//                            .switchIfEmpty(Mono.error(new IllegalArgumentException("Advertisement not owned by user")))
+//                            .flatMap(existingAd ->
+//                                    validateCategorySpecificFieldsAsync(request)
+//                                            .then(processAdUpdateWithImages(adId, existingAd, request, userInfo, newImages, imagesToDelete))
+//                            );
+//                })
                 .doOnSuccess(response -> {
                     long duration = System.currentTimeMillis() - startTime;
                     log.info("=== UPDATE BOAT AD WITH IMAGES SUCCESS === AdID: {}, Duration: {}ms ===",
@@ -294,19 +267,15 @@ public class BoatMarketplaceService {
             Flux<FilePart> newImages,
             List<Long> imagesToDelete) {
 
-        // Add this logging to see what's being passed
         log.info("=== PROCESS AD UPDATE WITH IMAGES === AdID: {}, " +
                         "ImagesToDelete: {}, HasNewImages: {} ===",
                 adId,
                 imagesToDelete != null ? imagesToDelete.toString() : "null",
                 newImages != null ? "yes" : "no");
 
-        // Update the main ad entity
         Ad updatedAd = Ad.builder()
                 .id(existingAd.getId())
-//                .title("")
                 .description(request.getDescription())
-//                .quickDescription("")
                 .category(request.getCategory().name())
                 .priceAmount(request.getPrice() != null ? request.getPrice().getAmount() : null)
                 .priceType(request.getPrice() != null ? request.getPrice().getType().name() : null)
@@ -328,7 +297,6 @@ public class BoatMarketplaceService {
                 .flatMap(savedAd -> {
                     log.info("=== AD UPDATED === ID: {} ===", savedAd.getId());
 
-                    // Process operations in sequence to avoid conflicts
                     log.info("=== STARTING IMAGE OPERATIONS === AdID: {}, DeleteCount: {}, AddNewImages: {} ===",
                             adId,
                             imagesToDelete != null ? imagesToDelete.size() : 0,
@@ -351,7 +319,6 @@ public class BoatMarketplaceService {
                 .flatMap(this::mapToResponse);
     }
 
-    // Enhanced deleteSpecifiedImages with more debugging
     private Mono<Void> deleteSpecifiedImages(Long adId, String userId, List<Long> imagesToDelete) {
         if (imagesToDelete == null || imagesToDelete.isEmpty()) {
             log.info("=== NO IMAGES TO DELETE === AdID: {}, List is null or empty ===", adId);
@@ -662,11 +629,9 @@ public class BoatMarketplaceService {
     // ===========================
     private Mono<Ad> createAdWithSpecificationAndImages(BoatAdRequest request, UserValidationResponse userInfo,
                                                         List<ValidatedImageData> images) {
-        // Create main ad
+
         Ad ad = Ad.builder()
-//                .title("")
                 .description(request.getDescription())
-//                .quickDescription("")
                 .category(request.getCategory().name())
                 .priceAmount(request.getPrice() != null ? request.getPrice().getAmount() : null)
                 .priceType(request.getPrice() != null ? request.getPrice().getType().name() : null)
@@ -689,7 +654,6 @@ public class BoatMarketplaceService {
                 .flatMap(savedAd -> {
                     log.info("=== AD SAVED === ID: {} ===", savedAd.getId());
 
-                    // Create specification and upload images in parallel
                     Mono<Void> specMono = createCategorySpecification(savedAd, request);
                     Mono<Void> imagesMono = uploadAndSaveImages(savedAd.getId(), userInfo.getUserId(), images);
 
@@ -928,7 +892,6 @@ public class BoatMarketplaceService {
         if (spec.getModel() == null || spec.getModel().trim().isEmpty()) {
             return Mono.error(new MandatoryFieldMissingException("model", "BOATS_AND_YACHTS"));
         }
-        // NEW FIELD VALIDATION
         if (spec.getPurpose() == null) {
             return Mono.error(new MandatoryFieldMissingException("purpose", "BOATS_AND_YACHTS"));
         }
@@ -947,9 +910,9 @@ public class BoatMarketplaceService {
         if (spec.getWidth() == null) {
             return Mono.error(new MandatoryFieldMissingException("width", "BOATS_AND_YACHTS"));
         }
-        if (spec.getMaxPeople() == null) {
-            return Mono.error(new MandatoryFieldMissingException("maxPeople", "BOATS_AND_YACHTS"));
-        }
+//        if (spec.getMaxPeople() == null) {
+//            return Mono.error(new MandatoryFieldMissingException("maxPeople", "BOATS_AND_YACHTS"));
+//        }
         if (spec.getYear() == null) {
             return Mono.error(new MandatoryFieldMissingException("year", "BOATS_AND_YACHTS"));
         }
@@ -1936,33 +1899,74 @@ public class BoatMarketplaceService {
     // ===========================
     // USER VALIDATION
     // ===========================
-    public Mono<UserValidationResponse> validateUser(String email, String token) {
-        long startTime = System.currentTimeMillis();
-        log.info("=== USER VALIDATION START === Email: {} ===", email);
+//    public Mono<UserValidationResponse> validateUser(String email, String token) {
+//        long startTime = System.currentTimeMillis();
+//        log.info("=== USER VALIDATION START === Email: {} ===", email);
+//
+//        return webClient.get()
+//                .uri(authServiceUrl + "/auth/validate-user?email=" + email)
+//                .header("Authorization", "Bearer " + token)
+//                .retrieve()
+//                .bodyToMono(UserValidationResponse.class)
+//                .timeout(Duration.ofSeconds(10))
+//                .doOnSuccess(response -> {
+//                    long duration = System.currentTimeMillis() - startTime;
+//                    log.info("=== USER VALIDATION SUCCESS === Email: {}, Exists: {}, UserID: {}, Duration: {}ms ===",
+//                            email, response.isExists(), response.getUserId(), duration);
+//                })
+//                .onErrorMap(WebClientResponseException.class, e -> {
+//                    long duration = System.currentTimeMillis() - startTime;
+//                    log.error("=== USER VALIDATION AUTH ERROR === Email: {}, Status: {}, Duration: {}ms, Body: {} ===",
+//                            email, e.getStatusCode(), duration, e.getResponseBodyAsString());
+//                    return new AuthServiceException("Failed to validate user: " + e.getMessage());
+//                })
+//                .onErrorMap(Exception.class, e -> {
+//                    if (e instanceof AuthServiceException) return e;
+//                    long duration = System.currentTimeMillis() - startTime;
+//                    log.error("=== USER VALIDATION UNEXPECTED ERROR === Email: {}, Duration: {}ms, Error: {} ===",
+//                            email, duration, e.getMessage(), e);
+//                    return new AuthServiceException("User validation failed: " + e.getMessage());
+//                });
+//    }
 
-        return webClient.get()
-                .uri(authServiceUrl + "/auth/validate-user?email=" + email)
-                .header("Authorization", "Bearer " + token)
-                .retrieve()
-                .bodyToMono(UserValidationResponse.class)
-                .timeout(Duration.ofSeconds(10))
-                .doOnSuccess(response -> {
-                    long duration = System.currentTimeMillis() - startTime;
-                    log.info("=== USER VALIDATION SUCCESS === Email: {}, Exists: {}, UserID: {}, Duration: {}ms ===",
-                            email, response.isExists(), response.getUserId(), duration);
-                })
-                .onErrorMap(WebClientResponseException.class, e -> {
-                    long duration = System.currentTimeMillis() - startTime;
-                    log.error("=== USER VALIDATION AUTH ERROR === Email: {}, Status: {}, Duration: {}ms, Body: {} ===",
-                            email, e.getStatusCode(), duration, e.getResponseBodyAsString());
-                    return new AuthServiceException("Failed to validate user: " + e.getMessage());
-                })
-                .onErrorMap(Exception.class, e -> {
-                    if (e instanceof AuthServiceException) return e;
-                    long duration = System.currentTimeMillis() - startTime;
-                    log.error("=== USER VALIDATION UNEXPECTED ERROR === Email: {}, Duration: {}ms, Error: {} ===",
-                            email, duration, e.getMessage(), e);
-                    return new AuthServiceException("User validation failed: " + e.getMessage());
+    // ===========================
+    // IMAGE VALIDATION
+    // ===========================
+    private Mono<List<ValidatedImageData>> validateImagesFirst(Flux<FilePart> images) {
+        log.debug("=== VALIDATING IMAGES ===");
+
+        return images.flatMap(this::validateAndProcessImage)
+                .collectList()
+                .doOnNext(imageList -> log.info("=== IMAGES VALIDATION COMPLETE === Count: {} ===", imageList.size()));
+    }
+
+    private Mono<ValidatedImageData> validateAndProcessImage(FilePart filePart) {
+        String originalFileName = filePart.filename();
+        String contentType = filePart.headers().getContentType() != null ?
+                filePart.headers().getContentType().toString() : "";
+
+        if (!imageConversionService.isFormatSupported(contentType)) {
+            return Mono.error(new InvalidFieldValueException("image",
+                    "Unsupported format for '" + originalFileName + "'. Supported: JPG, PNG, WebP, HEIC"));
+        }
+
+        return filePart.content()
+                .collectList()
+                .map(this::collectDataBufferBytes)
+                .flatMap(bytes -> {
+                    if (bytes.length > MAX_FILE_SIZE) {
+                        return Mono.error(new InvalidFieldValueException("image",
+                                "File too large: " + originalFileName));
+                    }
+
+                    return imageConversionService.convertToWebP(bytes, originalFileName, contentType)
+                            .map(converted -> ValidatedImageData.builder()
+                                    .originalFileName(originalFileName)
+                                    .contentType("image/webp")
+                                    .bytes(converted.getConvertedBytes())
+                                    .width(converted.getWidth())
+                                    .height(converted.getHeight())
+                                    .build());
                 });
     }
 }
