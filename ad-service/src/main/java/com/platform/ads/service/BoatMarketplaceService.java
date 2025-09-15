@@ -44,6 +44,7 @@ import com.platform.ads.entity.BoatSpecification;
 import com.platform.ads.entity.EngineSpecification;
 import com.platform.ads.entity.FishingSpecification;
 import com.platform.ads.entity.JetSkiSpecification;
+import com.platform.ads.entity.MarineAccessoriesSpecification;
 import com.platform.ads.entity.MarineElectronicsSpecification;
 import com.platform.ads.entity.PartsSpecification;
 import com.platform.ads.entity.RentalsSpecification;
@@ -55,7 +56,6 @@ import com.platform.ads.exception.AuthServiceException;
 import com.platform.ads.exception.CategoryMismatchException;
 import com.platform.ads.exception.InvalidFieldValueException;
 import com.platform.ads.exception.MandatoryFieldMissingException;
-import com.platform.ads.exception.UserNotFoundException;
 import com.platform.ads.repository.AdImageRepository;
 import com.platform.ads.repository.AdRepository;
 import com.platform.ads.repository.BoatEquipmentRepository;
@@ -87,13 +87,14 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
-import com.platform.ads.entity.MarineAccessoriesSpecification;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -136,20 +137,18 @@ public class BoatMarketplaceService {
     private final WaterSportsSpecificationRepository waterSportsSpecRepository;
     private final MarineAccessoriesSpecificationRepository marineAccessoriesSpecRepository;
     private final RentalsSpecificationRepository rentalsSpecRepository;
+    private final WebClient webClient;
 
-    // ===========================
-    // AD CREATION
-    // ===========================
     @Transactional
     public Mono<BoatAdResponse> createBoatAdWithImages(BoatAdRequest request, Flux<FilePart> images, String token) {
         long startTime = System.currentTimeMillis();
-        log.info("=== CREATE BOAT AD WITH IMAGES START === Category: {}, User: {} ===",
+        log.info("=== CREATE BOAT AD WITH IMAGES START === Category: {}, ContactEmail: {} ===",
                 request.getCategory(), request.getUserEmail());
 
         return validateImagesFirst(images)
                 .flatMap(imageList -> {
                     if (imageList.isEmpty()) {
-                        log.error("=== NO IMAGES PROVIDED === User: {} ===", request.getUserEmail());
+                        log.error("=== NO IMAGES PROVIDED === ContactEmail: {} ===", request.getUserEmail());
                         return Mono.error(new MandatoryFieldMissingException("images",
                                 "At least " + MIN_IMAGES_REQUIRED + " image is required"));
                     }
@@ -160,56 +159,34 @@ public class BoatMarketplaceService {
                                 "Maximum " + MAX_IMAGES_ALLOWED + " images allowed"));
                     }
 
-                    log.info("=== IMAGES VALIDATED === Count: {}, User: {} ===", imageList.size(), request.getUserEmail());
+                    log.info("=== IMAGES VALIDATED === Count: {}, ContactEmail: {} ===", imageList.size(), request.getUserEmail());
 
-                    // WITHOUT EMAIL VALIDATION
                     return validateCategorySpecificFieldsAsync(request)
-                            .then(createAdWithSpecificationAndImages(request, null, imageList)) // без user info
-                            .flatMap(ad -> {
-                                long duration = System.currentTimeMillis() - startTime;
-                                log.info("=== AD AND IMAGES CREATED === ID: {}, Duration: {}ms ===",
-                                        ad.getId(), duration);
-                                return this.mapToResponse(ad);
-                            });
+                            .then(getAuthenticatedUser(token))
+                            .flatMap(userInfo -> {
+                                log.info("=== AUTHENTICATED USER VALIDATED === UserID: {}, Name: {} {} ===",
+                                        userInfo.getUserId(), userInfo.getFirstName(), userInfo.getLastName());
 
-                    //WITH EMAIL VALIDATION
-//                    return validateCategorySpecificFieldsAsync(request)
-//                            .then(validateUser(request.getUserEmail(), token))
-//                            .flatMap(userInfo -> {
-//                                if (!userInfo.isExists()) {
-//                                    log.warn("=== USER NOT FOUND === Email: {} ===", request.getUserEmail());
-//                                    return Mono.error(new UserNotFoundException(request.getUserEmail()));
-//                                }
-//
-//                                log.info("=== USER VALIDATED === Email: {}, UserID: {}, Name: {} {} ===",
-//                                        request.getUserEmail(), userInfo.getUserId(),
-//                                        userInfo.getFirstName(), userInfo.getLastName());
-//
-//                                return createAdWithSpecificationAndImages(request, userInfo, imageList)
-//                                        .flatMap(ad -> {
-//                                            long duration = System.currentTimeMillis() - startTime;
-//                                            log.info("=== AD AND IMAGES CREATED === ID: {}, Duration: {}ms ===",
-//                                                    ad.getId(), duration);
-//                                            return this.mapToResponse(ad);
-//                                        });
-//                            });
+                                return createAdWithSpecificationAndImages(request, userInfo, imageList)
+                                        .flatMap(ad -> {
+                                            long duration = System.currentTimeMillis() - startTime;
+                                            log.info("=== AD AND IMAGES CREATED === ID: {}, Duration: {}ms ===",
+                                                    ad.getId(), duration);
+                                            return this.mapToResponse(ad);
+                                        });
+                            });
                 })
                 .doOnSuccess(response -> {
                     long duration = System.currentTimeMillis() - startTime;
-                    log.info("=== CREATE BOAT AD WITH IMAGES SUCCESS === ID: {}, Category: {}, User: {}, Duration: {}ms ===",
+                    log.info("=== CREATE BOAT AD WITH IMAGES SUCCESS === ID: {}, Category: {}, ContactEmail: {}, Duration: {}ms ===",
                             response.getId(), response.getCategory(), response.getUserEmail(), duration);
                 })
                 .doOnError(error -> {
                     long duration = System.currentTimeMillis() - startTime;
-                    log.error("=== CREATE BOAT AD WITH IMAGES FAILED === Category: {}, User: {}, Duration: {}ms, Error: {} ===",
+                    log.error("=== CREATE BOAT AD WITH IMAGES FAILED === Category: {}, ContactEmail: {}, Duration: {}ms, Error: {} ===",
                             request.getCategory(), request.getUserEmail(), duration, error.getMessage());
                 });
     }
-
-
-    // ===========================
-    // AD UPDATING WITH IMAGES
-    // ===========================
 
     @Transactional
     public Mono<BoatAdResponse> updateBoatAdWithImages(
@@ -220,33 +197,20 @@ public class BoatMarketplaceService {
             String token) {
 
         long startTime = System.currentTimeMillis();
-        log.info("=== UPDATE BOAT AD WITH IMAGES START === AdID: {}, Category: {}, User: {} ===",
+        log.info("=== UPDATE BOAT AD WITH IMAGES START === AdID: {}, Category: {}, ContactEmail: {} ===",
                 adId, request.getCategory(), request.getUserEmail());
 
-        //WITHOUT USER VALIDATION
-        return adRepository.findById(adId)
-                .switchIfEmpty(Mono.error(new AdNotFoundException(adId)))
-                .flatMap(existingAd ->
-                        validateCategorySpecificFieldsAsync(request)
-                                .then(processAdUpdateWithImages(adId, existingAd, request, null, newImages, imagesToDelete))
-                )
-
-        // WITH USER VALIDATION
-//        return validateUser(request.getUserEmail(), token)
-//                .flatMap(userInfo -> {
-//                    if (!userInfo.isExists()) {
-//                        return Mono.error(new UserNotFoundException(request.getUserEmail()));
-//                    }
-//
-//                    return adRepository.findById(adId)
-//                            .switchIfEmpty(Mono.error(new AdNotFoundException(adId)))
-//                            .filter(ad -> userInfo.getUserId().equals(ad.getUserId()))
-//                            .switchIfEmpty(Mono.error(new IllegalArgumentException("Advertisement not owned by user")))
-//                            .flatMap(existingAd ->
-//                                    validateCategorySpecificFieldsAsync(request)
-//                                            .then(processAdUpdateWithImages(adId, existingAd, request, userInfo, newImages, imagesToDelete))
-//                            );
-//                })
+        return getAuthenticatedUser(token)  // Get authenticated user info from token
+                .flatMap(userInfo -> {
+                    return adRepository.findById(adId)
+                            .switchIfEmpty(Mono.error(new AdNotFoundException(adId)))
+                            .filter(ad -> userInfo.getUserId().equals(ad.getUserId()))  // Check ownership
+                            .switchIfEmpty(Mono.error(new IllegalArgumentException("Advertisement not owned by user")))
+                            .flatMap(existingAd ->
+                                    validateCategorySpecificFieldsAsync(request)
+                                            .then(processAdUpdateWithImages(adId, existingAd, request, userInfo, newImages, imagesToDelete))
+                            );
+                })
                 .doOnSuccess(response -> {
                     long duration = System.currentTimeMillis() - startTime;
                     log.info("=== UPDATE BOAT AD WITH IMAGES SUCCESS === AdID: {}, Duration: {}ms ===",
@@ -257,6 +221,78 @@ public class BoatMarketplaceService {
                     log.error("=== UPDATE BOAT AD WITH IMAGES FAILED === AdID: {}, Duration: {}ms, Error: {} ===",
                             adId, duration, error.getMessage(), error);
                 });
+    }
+
+    public Mono<UserValidationResponse> getAuthenticatedUser(String token) {
+        long startTime = System.currentTimeMillis();
+        log.info("=== AUTHENTICATED USER VALIDATION START ===");
+
+        return webClient.get()
+                .uri(authServiceUrl + "/auth/me")  // Use existing /me endpoint
+                .header("Authorization", "Bearer " + token)
+                .retrieve()
+                .bodyToMono(Object.class)  // Get the profile response
+                .map(this::mapProfileToUserValidation)  // Convert to UserValidationResponse
+                .timeout(Duration.ofSeconds(10))
+                .doOnSuccess(response -> {
+                    long duration = System.currentTimeMillis() - startTime;
+                    log.info("=== AUTHENTICATED USER VALIDATION SUCCESS === UserID: {}, Name: {} {}, Duration: {}ms ===",
+                            response.getUserId(), response.getFirstName(), response.getLastName(), duration);
+                })
+                .onErrorMap(WebClientResponseException.class, e -> {
+                    long duration = System.currentTimeMillis() - startTime;
+                    log.error("=== AUTHENTICATED USER VALIDATION AUTH ERROR === Status: {}, Duration: {}ms, Body: {} ===",
+                            e.getStatusCode(), duration, e.getResponseBodyAsString());
+                    return new AuthServiceException("Failed to validate authenticated user: " + e.getMessage());
+                })
+                .onErrorMap(Exception.class, e -> {
+                    if (e instanceof AuthServiceException) return e;
+                    long duration = System.currentTimeMillis() - startTime;
+                    log.error("=== AUTHENTICATED USER VALIDATION UNEXPECTED ERROR === Duration: {}ms, Error: {} ===",
+                            duration, e.getMessage(), e);
+                    return new AuthServiceException("Authenticated user validation failed: " + e.getMessage());
+                });
+    }
+
+    private UserValidationResponse mapProfileToUserValidation(Object profileResponse) {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> profileMap = (Map<String, Object>) profileResponse;
+
+            String userType = (String) profileMap.get("userType");
+            String userId = (String) profileMap.get("id");
+            String email = (String) profileMap.get("email");
+
+            String firstName;
+            String lastName;
+
+            if ("COMPANY".equals(userType)) {
+                firstName = (String) profileMap.get("companyName");
+                lastName = (String) profileMap.get("storeName");
+            } else {
+                String fullName = (String) profileMap.get("name");
+                if (fullName != null && fullName.contains(" ")) {
+                    String[] nameParts = fullName.split(" ", 2);
+                    firstName = nameParts[0];
+                    lastName = nameParts[1];
+                } else {
+                    firstName = fullName != null ? fullName : "";
+                    lastName = "";
+                }
+            }
+
+            return UserValidationResponse.builder()
+                    .exists(true)
+                    .userId(userId)
+                    .email(email)
+                    .firstName(firstName)
+                    .lastName(lastName)
+                    .build();
+
+        } catch (Exception e) {
+            log.error("=== ERROR MAPPING PROFILE RESPONSE === Error: {} ===", e.getMessage());
+            throw new AuthServiceException("Failed to parse user profile: " + e.getMessage());
+        }
     }
 
     private Mono<BoatAdResponse> processAdUpdateWithImages(
@@ -1899,35 +1935,35 @@ public class BoatMarketplaceService {
     // ===========================
     // USER VALIDATION
     // ===========================
-//    public Mono<UserValidationResponse> validateUser(String email, String token) {
-//        long startTime = System.currentTimeMillis();
-//        log.info("=== USER VALIDATION START === Email: {} ===", email);
-//
-//        return webClient.get()
-//                .uri(authServiceUrl + "/auth/validate-user?email=" + email)
-//                .header("Authorization", "Bearer " + token)
-//                .retrieve()
-//                .bodyToMono(UserValidationResponse.class)
-//                .timeout(Duration.ofSeconds(10))
-//                .doOnSuccess(response -> {
-//                    long duration = System.currentTimeMillis() - startTime;
-//                    log.info("=== USER VALIDATION SUCCESS === Email: {}, Exists: {}, UserID: {}, Duration: {}ms ===",
-//                            email, response.isExists(), response.getUserId(), duration);
-//                })
-//                .onErrorMap(WebClientResponseException.class, e -> {
-//                    long duration = System.currentTimeMillis() - startTime;
-//                    log.error("=== USER VALIDATION AUTH ERROR === Email: {}, Status: {}, Duration: {}ms, Body: {} ===",
-//                            email, e.getStatusCode(), duration, e.getResponseBodyAsString());
-//                    return new AuthServiceException("Failed to validate user: " + e.getMessage());
-//                })
-//                .onErrorMap(Exception.class, e -> {
-//                    if (e instanceof AuthServiceException) return e;
-//                    long duration = System.currentTimeMillis() - startTime;
-//                    log.error("=== USER VALIDATION UNEXPECTED ERROR === Email: {}, Duration: {}ms, Error: {} ===",
-//                            email, duration, e.getMessage(), e);
-//                    return new AuthServiceException("User validation failed: " + e.getMessage());
-//                });
-//    }
+    public Mono<UserValidationResponse> validateUser(String email, String token) {
+        long startTime = System.currentTimeMillis();
+        log.info("=== USER VALIDATION START === Email: {} ===", email);
+
+        return webClient.get()
+                .uri(authServiceUrl + "/auth/validate-user?email=" + email)
+                .header("Authorization", "Bearer " + token)
+                .retrieve()
+                .bodyToMono(UserValidationResponse.class)
+                .timeout(Duration.ofSeconds(10))
+                .doOnSuccess(response -> {
+                    long duration = System.currentTimeMillis() - startTime;
+                    log.info("=== USER VALIDATION SUCCESS === Email: {}, Exists: {}, UserID: {}, Duration: {}ms ===",
+                            email, response.isExists(), response.getUserId(), duration);
+                })
+                .onErrorMap(WebClientResponseException.class, e -> {
+                    long duration = System.currentTimeMillis() - startTime;
+                    log.error("=== USER VALIDATION AUTH ERROR === Email: {}, Status: {}, Duration: {}ms, Body: {} ===",
+                            email, e.getStatusCode(), duration, e.getResponseBodyAsString());
+                    return new AuthServiceException("Failed to validate user: " + e.getMessage());
+                })
+                .onErrorMap(Exception.class, e -> {
+                    if (e instanceof AuthServiceException) return e;
+                    long duration = System.currentTimeMillis() - startTime;
+                    log.error("=== USER VALIDATION UNEXPECTED ERROR === Email: {}, Duration: {}ms, Error: {} ===",
+                            email, duration, e.getMessage(), e);
+                    return new AuthServiceException("User validation failed: " + e.getMessage());
+                });
+    }
 
     // ===========================
     // IMAGE VALIDATION

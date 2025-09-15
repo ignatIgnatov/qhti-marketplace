@@ -27,10 +27,6 @@ public class UserAdsService {
     private final ImageService imageService;
     private final BoatMarketplaceService marketplaceService;
 
-    // ===========================
-    // USER'S ADS MANAGEMENT
-    // ===========================
-
     public Flux<BoatAdResponse> getUserAds(String userId) {
         long startTime = System.currentTimeMillis();
         log.info("=== GET USER ADS START === UserId: {} ===", userId);
@@ -130,10 +126,6 @@ public class UserAdsService {
                 .reduce(0L, Long::sum);
     }
 
-    // ===========================
-    // AD MANAGEMENT ACTIONS
-    // ===========================
-
     public Mono<Void> deactivateUserAd(String userId, Long adId) {
         long startTime = System.currentTimeMillis();
         log.info("=== DEACTIVATE USER AD === UserId: {}, AdID: {} ===", userId, adId);
@@ -178,58 +170,6 @@ public class UserAdsService {
                             userId, adId, duration);
                 });
     }
-
-    // ===========================
-    // EDIT AD FUNCTIONALITY
-    // ===========================
-
-    @Transactional
-    public Mono<BoatAdResponse> updateAd(String userId, Long adId, UpdateAdRequest updateRequest) {
-        long startTime = System.currentTimeMillis();
-        log.info("=== UPDATE AD START === UserId: {}, AdID: {} ===",
-                userId, adId);
-
-        return validateAdOwnership(userId, adId)
-                .flatMap(ad -> {
-                    // Validate ad can be edited
-                    if (Boolean.TRUE.equals(ad.getArchived())) {
-                        log.warn("=== CANNOT EDIT ARCHIVED AD === AdID: {} ===", adId);
-                        return Mono.error(new IllegalStateException("Cannot edit archived advertisement"));
-                    }
-
-                    log.info("=== UPDATING AD BASIC INFO === AdID: {} ===",
-                            adId);
-
-                    LocalDateTime now = LocalDateTime.now();
-                    return adRepository.updateAdBasicInfo(
-                            adId, userId,
-//                            updateRequest.getTitle(),
-                            updateRequest.getDescription(),
-//                            updateRequest.getQuickDescription(),
-                            updateRequest.getPrice() != null ? updateRequest.getPrice().getAmount() : null,
-                            updateRequest.getPrice() != null ? updateRequest.getPrice().getType().name() : null,
-                            updateRequest.getPrice() != null ? updateRequest.getPrice().getIncludingVat() : null,
-                            updateRequest.getLocation(),
-                            now,
-                            now
-                    ).then(adRepository.findById(adId));
-                })
-                .flatMap(marketplaceService::mapToResponse)
-                .doOnSuccess(response -> {
-                    long duration = System.currentTimeMillis() - startTime;
-                    log.info("=== UPDATE AD SUCCESS === UserId: {}, AdID: {}, Duration: {}ms ===",
-                            userId, adId, duration);
-                })
-                .doOnError(error -> {
-                    long duration = System.currentTimeMillis() - startTime;
-                    log.error("=== UPDATE AD ERROR === UserId: {}, AdID: {}, Duration: {}ms, Error: {} ===",
-                            userId, adId, duration, error.getMessage());
-                });
-    }
-
-    // ===========================
-    // ENHANCED ARCHIVE WITH IMAGE HANDLING
-    // ===========================
 
     @Transactional
     public Mono<Void> archiveAd(String userId, Long adId) {
@@ -280,10 +220,6 @@ public class UserAdsService {
                 });
     }
 
-    // ===========================
-    // ENHANCED DELETE WITH COMPLETE CLEANUP
-    // ===========================
-
     @Transactional
     public Mono<Void> deleteAd(String userId, Long adId) {
         long startTime = System.currentTimeMillis();
@@ -291,14 +227,6 @@ public class UserAdsService {
 
         return validateAdOwnership(userId, adId)
                 .flatMap(ad -> {
-                    // Business rule: Only allow deletion of ads with low interaction
-                    if (ad.getViewsCount() != null && ad.getViewsCount() > 10) {
-                        log.warn("=== HIGH INTERACTION AD DELETION BLOCKED === AdID: {}, Views: {} ===",
-                                adId, ad.getViewsCount());
-                        return Mono.error(new IllegalStateException(
-                                "Cannot delete advertisement with high interaction. Consider archiving instead."));
-                    }
-
                     log.info("=== STARTING COMPLETE AD DELETION === AdID: {}, Views: {} ===",
                             adId, ad.getViewsCount());
 
@@ -319,9 +247,6 @@ public class UserAdsService {
                 });
     }
 
-    /**
-     * Deletes all images for an ad from both S3 and database
-     */
     private Mono<Void> deleteAllAdImagesComplete(Long adId) {
         log.info("=== DELETING ALL AD IMAGES === AdID: {} ===", adId);
 
@@ -343,10 +268,6 @@ public class UserAdsService {
                 .doOnSuccess(result -> log.info("=== ALL AD IMAGES S3 CLEANUP COMPLETE === AdID: {} ===", adId));
     }
 
-    // ===========================
-    // ARCHIVE MANAGEMENT
-    // ===========================
-
     public Flux<BoatAdResponse> getArchivedAds(String userId) {
         long startTime = System.currentTimeMillis();
         log.info("=== GET ARCHIVED ADS === UserId: {} ===", userId);
@@ -360,23 +281,6 @@ public class UserAdsService {
                     log.info("=== GET ARCHIVED ADS COMPLETE === UserId: {}, Duration: {}ms ===", userId, duration);
                 });
     }
-
-    public Flux<BoatAdResponse> getActiveAds(String userId) {
-        long startTime = System.currentTimeMillis();
-        log.info("=== GET ACTIVE ADS === UserId: {} ===", userId);
-
-        return adRepository.findNonArchivedByUserId(userId)
-                .filter(ad -> Boolean.TRUE.equals(ad.getActive()))
-                .flatMap(marketplaceService::mapToResponse)
-                .doOnComplete(() -> {
-                    long duration = System.currentTimeMillis() - startTime;
-                    log.info("=== GET ACTIVE ADS COMPLETE === UserId: {}, Duration: {}ms ===", userId, duration);
-                });
-    }
-
-    // ===========================
-    // HELPER METHODS
-    // ===========================
 
     private Mono<Ad> validateAdOwnership(String userId, Long adId) {
         return adRepository.findById(adId)
