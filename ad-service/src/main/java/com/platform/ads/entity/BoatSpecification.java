@@ -58,7 +58,7 @@ public class BoatSpecification {
     private BigDecimal draft;
 
     @Column("max_people")
-    private Integer maxPeople;
+    private Integer maxPeople = 1;
 
     @Column("year")
     private Integer year;

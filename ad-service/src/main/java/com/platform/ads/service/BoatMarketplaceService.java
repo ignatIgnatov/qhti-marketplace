@@ -322,9 +322,13 @@ public class BoatMarketplaceService {
                 .userId(existingAd.getUserId())
                 .userFirstName(existingAd.getUserFirstName())
                 .userLastName(existingAd.getUserLastName())
+                .contactEmail(request.getUserEmail())
+                .contactPersonName(request.getContactPersonName())
+                .contactPhone(request.getContactPhone())
                 .createdAt(existingAd.getCreatedAt())
                 .updatedAt(LocalDateTime.now())
                 .active(existingAd.getActive())
+                .archived(existingAd.getArchived())
                 .viewsCount(existingAd.getViewsCount())
                 .featured(existingAd.getFeatured())
                 .build();
@@ -652,15 +656,6 @@ public class BoatMarketplaceService {
     }
 
     // ===========================
-    // AD EDITING WITHOUT IMAGES (Optional)
-    // ===========================
-
-//    @Transactional
-//    public Mono<BoatAdResponse> updateBoatAd(Long adId, BoatAdRequest request, String token) {
-//        return updateBoatAdWithImages(adId, request, null, null, token);
-//    }
-
-    // ===========================
     // AD CREATION WITH IMAGES
     // ===========================
     private Mono<Ad> createAdWithSpecificationAndImages(BoatAdRequest request, UserValidationResponse userInfo,
@@ -674,10 +669,11 @@ public class BoatMarketplaceService {
                 .includingVat(request.getPrice() != null ? request.getPrice().getIncludingVat() : null)
                 .location(request.getLocation())
                 .adType(request.getAdType().name())
-                .userEmail(request.getUserEmail())
+                .userEmail(userInfo.getEmail())
                 .userId(userInfo.getUserId())
                 .userFirstName(userInfo.getFirstName())
                 .userLastName(userInfo.getLastName())
+                .contactEmail(request.getUserEmail())
                 .contactPersonName(request.getContactPersonName())
                 .contactPhone(request.getContactPhone())
                 .createdAt(LocalDateTime.now())

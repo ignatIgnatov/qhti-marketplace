@@ -456,7 +456,7 @@ public class AuthService {
 
                     if (Objects.equals(getAttributeValue(attributes, "user_type"), "COMPANY")) {
                         return CompanyInfoResponse.builder()
-                                .id(jwt.getId())
+                                .id(user.getId())
                                 .companyName(getAttributeValue(attributes, "company_name"))
                                 .email(user.getEmail())
                                 .storeName(getAttributeValue(attributes, "store_name"))
@@ -469,7 +469,7 @@ public class AuthService {
                                 .build();
                     } else {
                         return UserInfoResponse.builder()
-                                .id(jwt.getId())
+                                .id(user.getId())
                                 .email(jwt.getClaimAsString("email"))
                                 .name(jwt.getClaimAsString("name"))
                                 .phone(jwt.getClaimAsString("phone"))

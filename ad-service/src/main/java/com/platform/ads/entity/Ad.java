@@ -46,5 +46,5 @@ public class Ad {
     private LocalDateTime lastEditedAt;
     private String contactPersonName;
     private String contactPhone;
-
+    private String contactEmail;
 }

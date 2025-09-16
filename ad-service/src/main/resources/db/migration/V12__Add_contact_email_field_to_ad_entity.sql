@@ -1,0 +1,1 @@
+ALTER TABLE ads ADD COLUMN contact_email VARCHAR(255);
