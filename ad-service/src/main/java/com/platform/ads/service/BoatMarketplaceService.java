@@ -304,10 +304,12 @@ public class BoatMarketplaceService {
             List<Long> imagesToDelete) {
 
         log.info("=== PROCESS AD UPDATE WITH IMAGES === AdID: {}, " +
-                        "ImagesToDelete: {}, HasNewImages: {} ===",
+                        "ImagesToDelete: {}, HasNewImages: {}, ImageOrder: {}, PrimaryImageId: {} ===",
                 adId,
                 imagesToDelete != null ? imagesToDelete.toString() : "null",
-                newImages != null ? "yes" : "no");
+                newImages != null ? "yes" : "no",
+                request.getImageOrder() != null ? request.getImageOrder().toString() : "null",
+                request.getPrimaryImageId());
 
         Ad updatedAd = Ad.builder()
                 .id(existingAd.getId())
@@ -337,26 +339,124 @@ public class BoatMarketplaceService {
                 .flatMap(savedAd -> {
                     log.info("=== AD UPDATED === ID: {} ===", savedAd.getId());
 
-                    log.info("=== STARTING IMAGE OPERATIONS === AdID: {}, DeleteCount: {}, AddNewImages: {} ===",
-                            adId,
-                            imagesToDelete != null ? imagesToDelete.size() : 0,
-                            newImages != null ? "yes" : "no");
-
+                    // Поредица от операции върху снимките
                     return deleteSpecifiedImages(adId, userInfo.getUserId(), imagesToDelete)
                             .doOnSuccess(v -> log.info("=== DELETE IMAGES COMPLETED === AdID: {} ===", adId))
-                            .doOnError(e -> log.error("=== DELETE IMAGES FAILED === AdID: {}, Error: {} ===",
-                                    adId, e.getMessage()))
                             .then(validateAndAddNewImages(adId, userInfo.getUserId(), newImages))
                             .doOnSuccess(v -> log.info("=== ADD NEW IMAGES COMPLETED === AdID: {} ===", adId))
-                            .doOnError(e -> log.error("=== ADD NEW IMAGES FAILED === AdID: {}, Error: {} ===",
-                                    adId, e.getMessage()))
+                            .then(reorderImagesIfRequested(adId, userInfo.getUserId(), request.getImageOrder()))
+                            .doOnSuccess(v -> log.info("=== REORDER IMAGES COMPLETED === AdID: {} ===", adId))
+                            .then(setPrimaryImageIfRequested(adId, userInfo.getUserId(), request.getPrimaryImageId()))
+                            .doOnSuccess(v -> log.info("=== SET PRIMARY IMAGE COMPLETED === AdID: {} ===", adId))
                             .then(updateCategorySpecification(savedAd, request))
                             .doOnSuccess(v -> log.info("=== UPDATE SPECIFICATION COMPLETED === AdID: {} ===", adId))
-                            .doOnError(e -> log.error("=== UPDATE SPECIFICATION FAILED === AdID: {}, Error: {} ===",
-                                    adId, e.getMessage()))
                             .thenReturn(savedAd);
                 })
                 .flatMap(this::mapToResponse);
+    }
+
+    // Нов метод за преподреждане на снимки
+    private Mono<Void> reorderImagesIfRequested(Long adId, String userId, List<Long> imageOrder) {
+        if (imageOrder == null || imageOrder.isEmpty()) {
+            log.debug("=== NO IMAGE REORDERING REQUESTED === AdID: {} ===", adId);
+            return Mono.empty();
+        }
+
+        log.info("=== REORDERING IMAGES === AdID: {}, NewOrder: {} ===", adId, imageOrder);
+
+        // Валидация - всички image IDs трябва да принадлежат на тази обява
+        return adImageRepository.findByAdIdOrderByDisplayOrder(adId)
+                .map(AdImage::getId)
+                .collectList()
+                .flatMap(existingImageIds -> {
+                    // Проверка дали всички IDs в новия ред съществуват
+                    boolean allIdsExist = imageOrder.stream().allMatch(existingImageIds::contains);
+                    if (!allIdsExist) {
+                        return Mono.error(new IllegalArgumentException(
+                                "Invalid image IDs in reorder list - some images don't belong to this ad"));
+                    }
+
+                    // Проверка дали броят е същия (не пропускаме снимки)
+                    if (imageOrder.size() != existingImageIds.size()) {
+                        log.warn("=== REORDER SIZE MISMATCH === Expected: {}, Provided: {} ===",
+                                existingImageIds.size(), imageOrder.size());
+                        // Може да е OK ако сме изтрили снимки преди това
+                    }
+
+                    // Преподреждаме - задаваме нов display_order според позицията в списъка
+                    return Flux.fromIterable(imageOrder)
+                            .index()
+                            .flatMap(tuple -> {
+                                Long imageId = tuple.getT2();
+                                Integer newDisplayOrder = tuple.getT1().intValue();
+
+                                log.debug("=== SETTING NEW ORDER === ImageID: {}, NewOrder: {} ===",
+                                        imageId, newDisplayOrder);
+
+                                return adImageRepository.updateDisplayOrder(imageId, newDisplayOrder);
+                            })
+                            .then()
+                            .doOnSuccess(result -> log.info("=== IMAGE REORDERING SUCCESS === AdID: {} ===", adId));
+                });
+    }
+
+    // Нов метод за задаване на главна снимка
+    private Mono<Void> setPrimaryImageIfRequested(Long adId, String userId, Long primaryImageId) {
+        if (primaryImageId == null) {
+            log.debug("=== NO PRIMARY IMAGE CHANGE REQUESTED === AdID: {} ===", adId);
+            return Mono.empty();
+        }
+
+        log.info("=== SETTING PRIMARY IMAGE === AdID: {}, PrimaryImageId: {} ===", adId, primaryImageId);
+
+        return adImageRepository.findById(primaryImageId)
+                .switchIfEmpty(Mono.error(new IllegalArgumentException("Primary image not found")))
+                .flatMap(image -> {
+                    if (!image.getAdId().equals(adId)) {
+                        return Mono.error(new IllegalArgumentException(
+                                "Selected primary image doesn't belong to this ad"));
+                    }
+
+                    // Задаваме display_order = 0 на избраната снимка
+                    // и преместваме останалите
+                    return adImageRepository.findByAdIdOrderByDisplayOrder(adId)
+                            .collectList()
+                            .flatMap(images -> {
+                                // Намираме текущата главна снимка (display_order = 0)
+                                AdImage currentPrimary = images.stream()
+                                        .filter(img -> img.getDisplayOrder() == 0)
+                                        .findFirst()
+                                        .orElse(null);
+
+                                AdImage newPrimary = images.stream()
+                                        .filter(img -> img.getId().equals(primaryImageId))
+                                        .findFirst()
+                                        .orElse(null);
+
+                                if (newPrimary == null) {
+                                    return Mono.error(new IllegalArgumentException("New primary image not found in ad"));
+                                }
+
+                                // Ако вече е главна, не правим нищо
+                                if (newPrimary.getDisplayOrder() == 0) {
+                                    log.info("=== IMAGE ALREADY PRIMARY === ImageID: {} ===", primaryImageId);
+                                    return Mono.empty();
+                                }
+
+                                // Swapваме позициите
+                                Mono<Void> setPrimaryOrder = adImageRepository.updateDisplayOrder(primaryImageId, 0);
+
+                                Mono<Void> updateFormerPrimary = Mono.empty();
+                                if (currentPrimary != null) {
+                                    updateFormerPrimary = adImageRepository.updateDisplayOrder(
+                                            currentPrimary.getId(), newPrimary.getDisplayOrder());
+                                }
+
+                                return Mono.when(setPrimaryOrder, updateFormerPrimary)
+                                        .doOnSuccess(result -> log.info("=== PRIMARY IMAGE SET === AdID: {}, ImageID: {} ===",
+                                                adId, primaryImageId));
+                            });
+                });
     }
 
     private Mono<Void> deleteSpecifiedImages(Long adId, String userId, List<Long> imagesToDelete) {

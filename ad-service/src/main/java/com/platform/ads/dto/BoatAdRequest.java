@@ -47,6 +47,10 @@ public class BoatAdRequest {
 
     private List<Long> imagesToDelete;
 
+    private List<Long> imageOrder;
+
+    private Long primaryImageId;
+
     @NotBlank(message = "Description is required")
     @Size(min = 20, max = 2000, message = "Description must be between 20 and 2000 characters")
     private String description;
