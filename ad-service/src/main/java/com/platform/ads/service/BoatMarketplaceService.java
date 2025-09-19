@@ -78,6 +78,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
@@ -93,8 +94,10 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -188,7 +191,7 @@ public class BoatMarketplaceService {
                 });
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.SERIALIZABLE)
     public Mono<BoatAdResponse> updateBoatAdWithImages(
             Long adId,
             BoatAdRequest request,
@@ -355,7 +358,6 @@ public class BoatMarketplaceService {
                 .flatMap(this::mapToResponse);
     }
 
-    // Нов метод за преподреждане на снимки
     private Mono<Void> reorderImagesIfRequested(Long adId, String userId, List<Long> imageOrder) {
         if (imageOrder == null || imageOrder.isEmpty()) {
             log.debug("=== NO IMAGE REORDERING REQUESTED === AdID: {} ===", adId);
@@ -364,43 +366,114 @@ public class BoatMarketplaceService {
 
         log.info("=== REORDERING IMAGES === AdID: {}, NewOrder: {} ===", adId, imageOrder);
 
-        // Валидация - всички image IDs трябва да принадлежат на тази обява
         return adImageRepository.findByAdIdOrderByDisplayOrder(adId)
-                .map(AdImage::getId)
                 .collectList()
-                .flatMap(existingImageIds -> {
-                    // Проверка дали всички IDs в новия ред съществуват
-                    boolean allIdsExist = imageOrder.stream().allMatch(existingImageIds::contains);
-                    if (!allIdsExist) {
+                .flatMap(existingImages -> {
+                    log.info("=== CURRENT IMAGES FOR AD === AdID: {}, ImageIDs: {}, Count: {} ===",
+                            adId,
+                            existingImages.stream().map(AdImage::getId).collect(Collectors.toList()),
+                            existingImages.size());
+
+                    if (existingImages.isEmpty()) {
+                        log.warn("=== NO IMAGES FOUND FOR AD === AdID: {}, Cannot reorder ===", adId);
+                        return Mono.empty(); // No images to reorder
+                    }
+
+                    Set<Long> existingImageIds = existingImages.stream()
+                            .map(AdImage::getId)
+                            .collect(Collectors.toSet());
+
+                    // Detailed validation with logging
+                    List<Long> missingIds = imageOrder.stream()
+                            .filter(id -> !existingImageIds.contains(id))
+                            .collect(Collectors.toList());
+
+                    if (!missingIds.isEmpty()) {
+                        log.error("=== IMAGE VALIDATION FAILED === AdID: {}, RequestedIDs: {}, ExistingIDs: {}, MissingIDs: {} ===",
+                                adId, imageOrder, existingImageIds, missingIds);
                         return Mono.error(new IllegalArgumentException(
-                                "Invalid image IDs in reorder list - some images don't belong to this ad"));
+                                "Image IDs not found for ad " + adId + ": " + missingIds +
+                                        ". Existing images: " + existingImageIds));
                     }
 
-                    // Проверка дали броят е същия (не пропускаме снимки)
-                    if (imageOrder.size() != existingImageIds.size()) {
-                        log.warn("=== REORDER SIZE MISMATCH === Expected: {}, Provided: {} ===",
-                                existingImageIds.size(), imageOrder.size());
-                        // Може да е OK ако сме изтрили снимки преди това
-                    }
+                    // Only reorder images that are actually in the request
+                    // This allows partial reordering (not all images need to be specified)
+                    List<AdImage> imagesToReorder = existingImages.stream()
+                            .filter(img -> imageOrder.contains(img.getId()))
+                            .collect(Collectors.toList());
 
-                    // Преподреждаме - задаваме нов display_order според позицията в списъка
-                    return Flux.fromIterable(imageOrder)
-                            .index()
-                            .flatMap(tuple -> {
-                                Long imageId = tuple.getT2();
-                                Integer newDisplayOrder = tuple.getT1().intValue();
+                    List<AdImage> imagesToKeepInPlace = existingImages.stream()
+                            .filter(img -> !imageOrder.contains(img.getId()))
+                            .collect(Collectors.toList());
 
-                                log.debug("=== SETTING NEW ORDER === ImageID: {}, NewOrder: {} ===",
-                                        imageId, newDisplayOrder);
+                    log.info("=== REORDER PLAN === AdID: {}, ToReorder: {}, ToKeepInPlace: {} ===",
+                            adId,
+                            imagesToReorder.stream().map(AdImage::getId).collect(Collectors.toList()),
+                            imagesToKeepInPlace.stream().map(AdImage::getId).collect(Collectors.toList()));
 
-                                return adImageRepository.updateDisplayOrder(imageId, newDisplayOrder);
-                            })
-                            .then()
-                            .doOnSuccess(result -> log.info("=== IMAGE REORDERING SUCCESS === AdID: {} ===", adId));
-                });
+                    return performReorderingOperation(adId, imageOrder, existingImages);
+                })
+                .doOnSuccess(v -> log.info("=== IMAGE REORDERING SUCCESS === AdID: {} ===", adId))
+                .doOnError(e -> log.error("=== REORDER FAILED === AdID: {}, Error: {} ===", adId, e.getMessage()));
     }
 
-    // Нов метод за задаване на главна снимка
+    private Mono<Void> performReorderingOperation(Long adId, List<Long> imageOrder, List<AdImage> allImages) {
+        log.info("=== PERFORMING REORDER OPERATION === AdID: {}, TotalImages: {} ===", adId, allImages.size());
+
+        // Use a high offset to avoid conflicts during reordering
+        final int TEMP_OFFSET = 1000000;
+
+        // Step 1: Move ALL images to temporary positions to avoid constraint conflicts
+        Mono<Void> moveToTempPositions = Flux.fromIterable(allImages)
+                .index()
+                .flatMap(tuple -> {
+                    int index = tuple.getT1().intValue();
+                    AdImage image = tuple.getT2();
+                    int tempPosition = TEMP_OFFSET + index;
+
+                    log.debug("=== TEMP POSITION === ImageID: {}, TempPosition: {} ===", image.getId(), tempPosition);
+                    return adImageRepository.updateDisplayOrder(image.getId(), tempPosition);
+                })
+                .then()
+                .doOnSuccess(v -> log.debug("=== ALL IMAGES MOVED TO TEMP POSITIONS === AdID: {} ===", adId));
+
+        // Step 2: Set final positions for the reordered images
+        Mono<Void> setReorderedPositions = Flux.fromIterable(imageOrder)
+                .index()
+                .flatMap(tuple -> {
+                    int newPosition = tuple.getT1().intValue();
+                    Long imageId = tuple.getT2();
+
+                    log.debug("=== SETTING FINAL POSITION === ImageID: {}, Position: {} ===", imageId, newPosition);
+                    return adImageRepository.updateDisplayOrder(imageId, newPosition);
+                })
+                .then()
+                .doOnSuccess(v -> log.debug("=== REORDERED IMAGES POSITIONED === AdID: {} ===", adId));
+
+        // Step 3: Position remaining images after the reordered ones
+        Set<Long> reorderedIds = new HashSet<>(imageOrder);
+        List<AdImage> remainingImages = allImages.stream()
+                .filter(img -> !reorderedIds.contains(img.getId()))
+                .collect(Collectors.toList());
+
+        Mono<Void> setRemainingPositions = Flux.fromIterable(remainingImages)
+                .index()
+                .flatMap(tuple -> {
+                    int index = tuple.getT1().intValue();
+                    AdImage image = tuple.getT2();
+                    int newPosition = imageOrder.size() + index; // Start after reordered images
+
+                    log.debug("=== SETTING REMAINING POSITION === ImageID: {}, Position: {} ===", image.getId(), newPosition);
+                    return adImageRepository.updateDisplayOrder(image.getId(), newPosition);
+                })
+                .then()
+                .doOnSuccess(v -> log.debug("=== REMAINING IMAGES POSITIONED === AdID: {} ===", adId));
+
+        return moveToTempPositions
+                .then(setReorderedPositions)
+                .then(setRemainingPositions);
+    }
+
     private Mono<Void> setPrimaryImageIfRequested(Long adId, String userId, Long primaryImageId) {
         if (primaryImageId == null) {
             log.debug("=== NO PRIMARY IMAGE CHANGE REQUESTED === AdID: {} ===", adId);
@@ -417,12 +490,9 @@ public class BoatMarketplaceService {
                                 "Selected primary image doesn't belong to this ad"));
                     }
 
-                    // Задаваме display_order = 0 на избраната снимка
-                    // и преместваме останалите
                     return adImageRepository.findByAdIdOrderByDisplayOrder(adId)
                             .collectList()
                             .flatMap(images -> {
-                                // Намираме текущата главна снимка (display_order = 0)
                                 AdImage currentPrimary = images.stream()
                                         .filter(img -> img.getDisplayOrder() == 0)
                                         .findFirst()
@@ -437,13 +507,11 @@ public class BoatMarketplaceService {
                                     return Mono.error(new IllegalArgumentException("New primary image not found in ad"));
                                 }
 
-                                // Ако вече е главна, не правим нищо
                                 if (newPrimary.getDisplayOrder() == 0) {
                                     log.info("=== IMAGE ALREADY PRIMARY === ImageID: {} ===", primaryImageId);
                                     return Mono.empty();
                                 }
 
-                                // Swapваме позициите
                                 Mono<Void> setPrimaryOrder = adImageRepository.updateDisplayOrder(primaryImageId, 0);
 
                                 Mono<Void> updateFormerPrimary = Mono.empty();
