@@ -4,6 +4,7 @@ import com.platform.ads.dto.BoatAdRequest;
 import com.platform.ads.dto.BoatAdResponse;
 import com.platform.ads.dto.BoatMarketplaceStatsResponse;
 import com.platform.ads.dto.BoatSearchRequest;
+import com.platform.ads.dto.ImageUploadResponse;
 import com.platform.ads.dto.enums.MainBoatCategory;
 import com.platform.ads.exception.AdNotFoundException;
 import com.platform.ads.exception.AuthServiceException;
@@ -153,11 +154,15 @@ public class BoatMarketplaceController {
 //                });
     }
 
+    // ===========================
+// UPDATED: Main Ad Update Endpoint (Without Image Uploads)
+// ===========================
+
     @Operation(
-            summary = "Update boat advertisement with images",
+            summary = "Update boat advertisement",
             description = "Updates an existing boat advertisement including specification details, " +
-                    "adding new images, and/or removing existing images. All operations are performed " +
-                    "in a single transaction to ensure data consistency."
+                    "deleting existing images, and/or reordering existing images. " +
+                    "To upload new images, use the separate upload endpoint."
     )
     @ApiResponses(value = {
             @ApiResponse(
@@ -204,14 +209,6 @@ public class BoatMarketplaceController {
                     )
             ),
             @ApiResponse(
-                    responseCode = "413",
-                    description = "Payload too large - file size exceeds 5MB limit",
-                    content = @Content(
-                            mediaType = "application/json",
-                            schema = @Schema(implementation = ErrorResponse.class)
-                    )
-            ),
-            @ApiResponse(
                     responseCode = "500",
                     description = "Internal server error",
                     content = @Content(
@@ -220,19 +217,24 @@ public class BoatMarketplaceController {
                     )
             )
     })
-    @PutMapping(value = "/{adId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public Mono<ResponseEntity<BoatAdResponse>> updateBoatAdWithImages(
+    @PutMapping(value = "/{adId}", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public Mono<ResponseEntity<BoatAdResponse>> updateBoatAd(
+            @Parameter(description = "Advertisement ID to update", required = true, example = "123")
             @PathVariable Long adId,
-            @RequestPart("adData") BoatAdRequest request,
-            @RequestPart(value = "newImages", required = false) Flux<FilePart> newImages,
+
+            @Parameter(description = "Advertisement data containing all details, specifications, and image management instructions", required = true)
+            @RequestBody @Valid BoatAdRequest request,
+
+            @Parameter(description = "Bearer token for authentication", required = true, example = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...")
             @RequestHeader("Authorization") String authHeader) {
 
-        log.info("=== UPDATE AD REQUEST === AdID: {}, User: {}, Category: {}, ImagesToDelete: {} ===",
-                adId, request.getUserEmail(), request.getCategory(), request.getImagesToDelete());
+        log.info("=== UPDATE AD REQUEST === AdID: {}, User: {}, Category: {}, ImagesToDelete: {}, ImageOrder: {} ===",
+                adId, request.getUserEmail(), request.getCategory(),
+                request.getImagesToDelete(), request.getImageOrder());
 
         String token = authHeader.replace("Bearer ", "");
 
-        return marketplaceService.updateBoatAdWithImages(adId, request, newImages, request.getImagesToDelete(), token)
+        return marketplaceService.updateBoatAdWithImages(adId, request, token)
                 .map(response -> ResponseEntity.ok(response))
                 .onErrorResume(AdNotFoundException.class, e -> {
                     log.warn("=== AD NOT FOUND === AdID: {} ===", adId);
@@ -259,6 +261,71 @@ public class BoatMarketplaceController {
                 .onErrorResume(Exception.class, e -> {
                     log.error("=== UNEXPECTED ERROR === AdID: {}, Error: {} ===", adId, e.getMessage(), e);
                     return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build());
+                });
+    }
+
+    @PostMapping(value = "/{adId}/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(
+            summary = "Upload images to existing advertisement",
+            description = "Uploads one or more images to an existing advertisement. " +
+                    "Images will be added to the end of the current image list. " +
+                    "Maximum 14 images total per advertisement."
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Images uploaded successfully",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = ImageUploadResponse.class)
+                    )
+            ),
+            @ApiResponse(responseCode = "400", description = "Invalid images or too many images"),
+            @ApiResponse(responseCode = "401", description = "Unauthorized - invalid or missing token"),
+            @ApiResponse(responseCode = "403", description = "Forbidden - user does not own this advertisement"),
+            @ApiResponse(responseCode = "404", description = "Advertisement not found"),
+            @ApiResponse(responseCode = "413", description = "Image file too large"),
+            @ApiResponse(responseCode = "422", description = "Invalid image format"),
+            @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public Flux<ImageUploadResponse> uploadImagesToAd(
+            @Parameter(description = "Advertisement ID", required = true, example = "123")
+            @PathVariable Long adId,
+
+            @Parameter(description = "Image files (max 10MB each, JPEG/PNG/WEBP/HEIC)", required = true)
+            @RequestPart("images") Flux<FilePart> images,
+
+            @Parameter(description = "JWT token", required = true)
+            @RequestHeader("Authorization") String authHeader) {
+
+        long startTime = System.currentTimeMillis();
+        String token = extractTokenFromHeader(authHeader);
+
+        log.info("=== UPLOAD IMAGES TO AD REQUEST === AdID: {} ===", adId);
+
+        return marketplaceService.uploadImagesToExistingAd(adId, images, token)
+                .doOnNext(response -> log.debug("=== IMAGE UPLOADED === AdID: {}, ImageID: {} ===",
+                        adId, response.getId()))
+                .doOnComplete(() -> {
+                    long duration = System.currentTimeMillis() - startTime;
+                    log.info("=== UPLOAD IMAGES TO AD COMPLETE === AdID: {}, Duration: {}ms ===", adId, duration);
+                })
+                .doOnError(error -> {
+                    long duration = System.currentTimeMillis() - startTime;
+                    log.error("=== UPLOAD IMAGES TO AD ERROR === AdID: {}, Duration: {}ms, Error: {} ===",
+                            adId, duration, error.getMessage());
+                })
+                .onErrorResume(AdNotFoundException.class, e -> {
+                    log.warn("=== AD NOT FOUND FOR IMAGE UPLOAD === AdID: {} ===", adId);
+                    return Flux.empty();
+                })
+                .onErrorResume(IllegalArgumentException.class, e -> {
+                    log.warn("=== IMAGE UPLOAD VALIDATION ERROR === AdID: {}, Error: {} ===", adId, e.getMessage());
+                    return Flux.empty();
+                })
+                .onErrorResume(InvalidFieldValueException.class, e -> {
+                    log.warn("=== INVALID IMAGE === AdID: {}, Error: {} ===", adId, e.getMessage());
+                    return Flux.empty();
                 });
     }
 
