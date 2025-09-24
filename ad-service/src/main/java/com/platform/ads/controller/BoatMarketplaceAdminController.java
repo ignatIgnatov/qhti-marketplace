@@ -7,6 +7,7 @@ import com.platform.ads.dto.UserStatisticsResponse;
 import com.platform.ads.exception.AdNotFoundException;
 import com.platform.ads.service.BoatMarketplaceAdminService;
 import com.platform.ads.service.BoatMarketplaceService;
+import io.swagger.v3.oas.annotations.Hidden;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -33,6 +34,7 @@ import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+@Hidden
 @Slf4j
 @RestController
 @RequestMapping("/admin")

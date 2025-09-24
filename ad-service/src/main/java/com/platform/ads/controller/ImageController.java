@@ -3,6 +3,7 @@ package com.platform.ads.controller;
 import com.platform.ads.dto.ImageUploadResponse;
 import com.platform.ads.dto.ImageReorderRequest;
 import com.platform.ads.service.ImageService;
+import io.swagger.v3.oas.annotations.Hidden;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+@Hidden
 @Slf4j
 @RestController
 @RequestMapping("/ads/images")

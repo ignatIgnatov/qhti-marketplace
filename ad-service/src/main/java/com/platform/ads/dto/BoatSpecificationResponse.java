@@ -44,7 +44,6 @@ public class BoatSpecificationResponse {
     private ItemCondition condition;
     private BoatSpecificationDto.WaterType waterType;
     private Integer engineHours;
-    private Boolean locatedInBulgaria;
     private List<InteriorFeature> interiorFeatures;
     private List<ExteriorFeature> exteriorFeatures;
     private List<Equipment> equipment;

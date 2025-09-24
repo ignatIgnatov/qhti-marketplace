@@ -55,6 +55,9 @@ public class BoatAdRequest {
     @Size(min = 20, max = 2000, message = "Description must be between 20 and 2000 characters")
     private String description;
 
+    @NotNull(message = "Location in Bulgaria is required")
+    private Boolean locatedInBulgaria;
+
     private BoatSpecificationDto boatSpec;
     private JetSkiSpecificationDto jetSkiSpec;
     private TrailerSpecificationDto trailerSpec;

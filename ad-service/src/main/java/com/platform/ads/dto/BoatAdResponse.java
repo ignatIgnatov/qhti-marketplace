@@ -37,6 +37,7 @@ public class BoatAdResponse {
     private Boolean active;
     private Integer viewsCount;
     private Boolean featured;
+    private Boolean locatedInBulgaria;
 
     private List<ImageUploadResponse> images;
     private ImageUploadResponse primaryImage;

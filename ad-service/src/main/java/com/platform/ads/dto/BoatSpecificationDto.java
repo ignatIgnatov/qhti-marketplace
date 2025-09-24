@@ -118,8 +118,8 @@ public class BoatSpecificationDto {
 //    @Min(value = 0, message = "Engine hours cannot be negative")
 //    private Integer engineHours;
 //
-    @NotNull(message = "Location in Bulgaria is required")
-    private Boolean locatedInBulgaria;
+//    @NotNull(message = "Location in Bulgaria is required")
+//    private Boolean locatedInBulgaria;
 
     private List<InteriorFeature> interiorFeatures;
     private List<ExteriorFeature> exteriorFeatures;

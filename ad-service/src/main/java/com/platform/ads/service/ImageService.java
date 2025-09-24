@@ -414,7 +414,7 @@ public class ImageService {
 
     private Mono<Integer> getNextDisplayOrder(Long adId) {
         return imageRepository.countByAdId(adId)
-                .map(count -> count.intValue());
+                .map(Long::intValue);
     }
 
     private Mono<String> uploadToS3(String s3Key, byte[] bytes, String contentType) {

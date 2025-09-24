@@ -105,8 +105,8 @@ public class BoatSpecification {
     @Column("engine_hours")
     private Integer engineHours;
 
-    @Column("located_in_bulgaria")
-    private Boolean locatedInBulgaria;
+//    @Column("located_in_bulgaria")
+//    private Boolean locatedInBulgaria;
 
     @Column("created_at")
     private LocalDateTime createdAt;

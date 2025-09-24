@@ -47,4 +47,5 @@ public class Ad {
     private String contactPersonName;
     private String contactPhone;
     private String contactEmail;
+    private Boolean locatedInBulgaria;
 }

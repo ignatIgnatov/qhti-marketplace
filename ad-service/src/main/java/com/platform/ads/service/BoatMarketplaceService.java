@@ -78,7 +78,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
@@ -143,7 +142,7 @@ public class BoatMarketplaceService {
     private final WebClient webClient;
 
     @Transactional
-    public Mono<BoatAdResponse> createBoatAdWithImages(BoatAdRequest request, Flux<FilePart> images, String token) {
+    public Mono<BoatAdResponse> createAd(BoatAdRequest request, Flux<FilePart> images, String token) {
         long startTime = System.currentTimeMillis();
         log.info("=== CREATE BOAT AD WITH IMAGES START === Category: {}, ContactEmail: {} ===",
                 request.getCategory(), request.getUserEmail());
@@ -192,7 +191,7 @@ public class BoatMarketplaceService {
     }
 
     @Transactional
-    public Mono<BoatAdResponse> updateBoatAdWithImages(
+    public Mono<BoatAdResponse> updateAd(
             Long adId,
             BoatAdRequest request,
             String token) {
@@ -336,9 +335,9 @@ public class BoatMarketplaceService {
         return adRepository.findById(adId)
                 .switchIfEmpty(Mono.error(new AdNotFoundException(adId)))
                 .filter(ad -> userId.equals(ad.getUserId()))
-                .switchIfEmpty(Mono.error(new IllegalArgumentException("Advertisement not owned by user")))
-                .filter(ad -> Boolean.TRUE.equals(ad.getActive()) && !Boolean.TRUE.equals(ad.getArchived()))
-                .switchIfEmpty(Mono.error(new IllegalArgumentException("Cannot upload images to inactive or archived advertisement")));
+                .switchIfEmpty(Mono.error(new IllegalArgumentException("Advertisement not owned by user")));
+//                .filter(ad -> Boolean.TRUE.equals(ad.getActive()) && !Boolean.TRUE.equals(ad.getArchived()))
+//                .switchIfEmpty(Mono.error(new IllegalArgumentException("Cannot upload images to inactive or archived advertisement")));
     }
 
     private Flux<ImageUploadResponse> uploadNewImagesToAd(Long adId, String userId, List<ValidatedImageData> images) {
@@ -936,6 +935,7 @@ public class BoatMarketplaceService {
                                                         List<ValidatedImageData> images) {
 
         Ad ad = Ad.builder()
+                .locatedInBulgaria(request.getLocatedInBulgaria())
                 .description(request.getDescription())
                 .category(request.getCategory().name())
                 .priceAmount(request.getPrice() != null ? request.getPrice().getAmount() : null)
@@ -1072,6 +1072,10 @@ public class BoatMarketplaceService {
 
     private Mono<Void> validateCategorySpecificFieldsAsync(BoatAdRequest request) {
         log.debug("=== VALIDATING CATEGORY FIELDS ASYNC === Category: {} ===", request.getCategory());
+
+        if (request.getLocatedInBulgaria() == null) {
+            return Mono.error(new MandatoryFieldMissingException("locatedInBulgaria", "ALL_CATEGORIES"));
+        }
 
         switch (request.getCategory()) {
             case BOATS_AND_YACHTS:
@@ -1261,9 +1265,6 @@ public class BoatMarketplaceService {
 //        if (spec.getEngineHours() == null) {
 //            return Mono.error(new MandatoryFieldMissingException("engineHours", "BOATS_AND_YACHTS"));
 //        }
-        if (spec.getLocatedInBulgaria() == null) {
-            return Mono.error(new MandatoryFieldMissingException("locatedInBulgaria", "BOATS_AND_YACHTS"));
-        }
 
         String boatCategory = mapBoatTypeToCategory(spec.getType());
         return brandService.validateBrand(spec.getBrand(), boatCategory)
@@ -1593,7 +1594,6 @@ public class BoatMarketplaceService {
                 .condition(spec.getCondition().name())
 //                .waterType(spec.getWaterType().name())
 //                .engineHours(spec.getEngineHours())
-                .locatedInBulgaria(spec.getLocatedInBulgaria())
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
@@ -1805,9 +1805,8 @@ public class BoatMarketplaceService {
     public Mono<BoatAdResponse> mapToResponse(Ad ad) {
         BoatAdResponse.BoatAdResponseBuilder responseBuilder = BoatAdResponse.builder()
                 .id(ad.getId())
-//                .title(ad.getTitle())
+                .locatedInBulgaria(ad.getLocatedInBulgaria())
                 .description(ad.getDescription())
-//                .quickDescription(ad.getQuickDescription())
                 .category(MainBoatCategory.valueOf(ad.getCategory()))
                 .price(ad.getPriceAmount() != null ? PriceInfo.builder()
                         .amount(ad.getPriceAmount())
@@ -2017,8 +2016,7 @@ public class BoatMarketplaceService {
                 .condition(ItemCondition.valueOf(spec.getCondition()))
                 .waterType(spec.getWaterType() != null ?                                     // NEW FIELD
                         BoatSpecificationDto.WaterType.valueOf(spec.getWaterType()) : null)  // NEW FIELD
-                .engineHours(spec.getEngineHours())                                          // NEW FIELD
-                .locatedInBulgaria(spec.getLocatedInBulgaria())                              // NEW FIELD
+                .engineHours(spec.getEngineHours())                                          // NEW FIELD                 // NEW FIELD
                 .interiorFeatures(tuple.getT1().stream()
                         .map(f -> InteriorFeature.valueOf(f.getFeature()))
                         .collect(Collectors.toList()))
