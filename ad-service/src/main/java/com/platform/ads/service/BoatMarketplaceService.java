@@ -242,6 +242,7 @@ public class BoatMarketplaceService {
                 .priceAmount(request.getPrice() != null ? request.getPrice().getAmount() : null)
                 .priceType(request.getPrice() != null ? request.getPrice().getType().name() : null)
                 .includingVat(request.getPrice() != null ? request.getPrice().getIncludingVat() : null)
+                .locatedInBulgaria(request.getLocatedInBulgaria())
                 .location(request.getLocation())
                 .adType(request.getAdType().name())
                 .userEmail(existingAd.getUserEmail())
