@@ -34,8 +34,9 @@ public class BoatSpecificationDto {
 
     private String brandCategory; // MOTOR_BOATS, SAILBOATS, KAYAKS
 
-    @NotNull(message = "Boat purpose is required")
-    private BoatPurpose purpose;
+    @NotNull(message = "Boat purposes are required")
+    @Size(min = 1, message = "At least one boat purpose must be selected")
+    private List<BoatPurpose> purposes;
 
     @NotBlank(message = "Model is required")
     @Size(max = 100, message = "Model cannot exceed 100 characters")
@@ -95,7 +96,10 @@ public class BoatSpecificationDto {
     @NotNull(message = "Auxiliary engine status is required")
     private Boolean hasAuxiliaryEngine;
 
-    private ConsoleType consoleType;
+    @NotNull(message = "Console types are required")
+    @Size(min = 1, message = "At least one console type must be selected")
+    private List<ConsoleType> consoleTypes;
+
     private FuelType fuelType;
     private MaterialType material;
 
@@ -109,17 +113,6 @@ public class BoatSpecificationDto {
 
     @NotNull(message = "Condition is required")
     private ItemCondition condition;
-
-    // NEW FIELDS from specification
-//    @NotNull(message = "Water type is required")
-//    private WaterType waterType;
-
-//    @NotNull(message = "Engine hours is required")
-//    @Min(value = 0, message = "Engine hours cannot be negative")
-//    private Integer engineHours;
-//
-//    @NotNull(message = "Location in Bulgaria is required")
-//    private Boolean locatedInBulgaria;
 
     private List<InteriorFeature> interiorFeatures;
     private List<ExteriorFeature> exteriorFeatures;
@@ -146,7 +139,8 @@ public class BoatSpecificationDto {
         FISHING("Рибарска"),
         BEACH("Плажна"),
         WATER_SPORTS("Водни спортове"),
-        WORK("Работна");
+        WORK("Работна"),
+        OVERNIGHT_STAY("Нощуване");
 
         private final String displayName;
         BoatPurpose(String displayName) { this.displayName = displayName; }
@@ -192,7 +186,8 @@ public class BoatSpecificationDto {
         PETROL("Бензин"),
         DIESEL("Дизел"),
         LPG("Пропан бутан"),
-        HYDROGEN("Водород");
+        HYDROGEN("Водород"),
+        ELECTRIC("Ток");
 
         private final String displayName;
         FuelType(String displayName) { this.displayName = displayName; }

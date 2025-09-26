@@ -20,7 +20,7 @@ public class BoatSpecificationResponse {
     private BoatSpecificationDto.BoatType type;
     private String brand;
     private String model;
-    private BoatSpecificationDto.BoatPurpose purpose; // NEW
+    private List<BoatSpecificationDto.BoatPurpose> purposes; // Changed from single purpose to list
     private BoatSpecificationDto.EngineType engineType;
     private Boolean engineIncluded;
     private String engineBrandModel;
@@ -36,7 +36,7 @@ public class BoatSpecificationResponse {
     private Boolean hasWaterTank;
     private Integer numberOfEngines;
     private Boolean hasAuxiliaryEngine;
-    private BoatSpecificationDto.ConsoleType consoleType;
+    private List<BoatSpecificationDto.ConsoleType> consoleTypes;
     private BoatSpecificationDto.FuelType fuelType;
     private BoatSpecificationDto.MaterialType material;
     private Boolean isRegistered;

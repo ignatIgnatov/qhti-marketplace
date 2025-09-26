@@ -5,7 +5,8 @@ public enum BoatPurpose {
     FISHING("Рибарска"),
     BEACH("Плажна"),
     WATER_SPORTS("Водни спортове"),
-    WORK("Работна");
+    WORK("Работна"),
+    OVERNIGHT_STAY("Нощуване");
 
     private final String displayName;
     BoatPurpose(String displayName) { this.displayName = displayName; }

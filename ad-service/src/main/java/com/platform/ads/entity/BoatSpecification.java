@@ -33,9 +33,6 @@ public class BoatSpecification {
     @Column("model")
     private String model;
 
-    @Column("boat_purpose")
-    private String boatPurpose;
-
     @Column("engine_type")
     private String engineType;
 
@@ -81,9 +78,6 @@ public class BoatSpecification {
     @Column("has_auxiliary_engine")
     private Boolean hasAuxiliaryEngine;
 
-    @Column("console_type")
-    private String consoleType;
-
     @Column("fuel_type")
     private String fuelType;
 
@@ -104,9 +98,6 @@ public class BoatSpecification {
 
     @Column("engine_hours")
     private Integer engineHours;
-
-//    @Column("located_in_bulgaria")
-//    private Boolean locatedInBulgaria;
 
     @Column("created_at")
     private LocalDateTime createdAt;
