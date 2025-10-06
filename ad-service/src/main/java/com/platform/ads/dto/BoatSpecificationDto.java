@@ -81,16 +81,11 @@ public class BoatSpecificationDto {
     @DecimalMin(value = "0.1", message = "Weight must be positive")
     private BigDecimal weight;
 
-    @NotNull(message = "Fuel capacity is required")
-    @DecimalMin(value = "0.0", message = "Fuel capacity cannot be negative")
     private BigDecimal fuelCapacity;
 
     @NotNull(message = "Water tank status is required")
     private Boolean hasWaterTank;
 
-    @NotNull(message = "Number of engines is required")
-    @Min(value = 0, message = "Number of engines cannot be negative")
-    @Max(value = 10, message = "Number of engines cannot exceed 10")
     private Integer numberOfEngines;
 
     @NotNull(message = "Auxiliary engine status is required")

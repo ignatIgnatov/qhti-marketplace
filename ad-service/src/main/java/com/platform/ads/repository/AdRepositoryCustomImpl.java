@@ -170,7 +170,7 @@ public class AdRepositoryCustomImpl {
                 .priceAmount(row.get("price_amount", BigDecimal.class))
                 .priceType(row.get("price_type", String.class))
                 .includingVat(row.get("including_vat", Boolean.class))
-                .location(row.get("location", String.class))
+                .location1(row.get("location", String.class))
                 .adType(row.get("ad_type", String.class))
                 .userEmail(row.get("user_email", String.class))
                 .userId(row.get("user_id", String.class))

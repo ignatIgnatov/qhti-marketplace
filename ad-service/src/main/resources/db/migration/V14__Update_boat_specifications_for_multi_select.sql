@@ -2,6 +2,11 @@
 -- Migration to support multiple boat purposes and console types (FIXED VERSION)
 
 -- =============================================================================
+-- DROP DEPENDENT VIEWS FIRST
+-- =============================================================================
+DROP VIEW IF EXISTS boat_ads_with_specs;
+
+-- =============================================================================
 -- CREATE NEW TABLES FOR MULTI-SELECT FIELDS
 -- =============================================================================
 
@@ -78,11 +83,8 @@ ALTER TABLE boat_specifications
     CHECK (fuel_type IS NULL OR fuel_type IN ('ALL', 'PETROL', 'DIESEL', 'LPG', 'HYDROGEN', 'ELECTRIC'));
 
 -- =============================================================================
--- UPDATE VIEWS
+-- RECREATE VIEWS
 -- =============================================================================
-
--- Drop and recreate the boat_ads_with_specs view to handle the new structure
-DROP VIEW IF EXISTS boat_ads_with_specs;
 
 CREATE VIEW boat_ads_with_specs AS
 SELECT

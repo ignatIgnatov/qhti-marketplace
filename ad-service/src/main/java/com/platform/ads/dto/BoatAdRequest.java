@@ -31,9 +31,12 @@ public class BoatAdRequest {
     @NotNull(message = "Price info is required")
     private PriceInfo price;
 
-    @NotBlank(message = "Location is required")
+    @NotBlank(message = "Location1 is required")
     @Size(max = 200, message = "Location cannot exceed 200 characters")
-    private String location;
+    private String location1;
+
+    @Size(max = 200, message = "Location2 cannot exceed 200 characters")
+    private String location2;
 
     @NotBlank(message = "Email is required")
     @Email
@@ -56,7 +59,7 @@ public class BoatAdRequest {
     private String description;
 
     @NotNull(message = "Location in Bulgaria is required")
-    private Boolean locatedInBulgaria;
+    private Boolean locatedInBulgaria = true;
 
     private BoatSpecificationDto boatSpec;
     private JetSkiSpecificationDto jetSkiSpec;

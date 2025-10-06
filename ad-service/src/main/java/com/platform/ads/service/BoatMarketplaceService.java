@@ -247,7 +247,8 @@ public class BoatMarketplaceService {
                 .priceType(request.getPrice() != null ? request.getPrice().getType().name() : null)
                 .includingVat(request.getPrice() != null ? request.getPrice().getIncludingVat() : null)
                 .locatedInBulgaria(request.getLocatedInBulgaria())
-                .location(request.getLocation())
+                .location1(request.getLocation1())
+                .location2(request.getLocation2())
                 .adType(request.getAdType().name())
                 .userEmail(existingAd.getUserEmail())
                 .userId(existingAd.getUserId())
@@ -715,29 +716,29 @@ public class BoatMarketplaceService {
                         adId, e.getMessage()));
     }
 
-    private Mono<Void> validateAndAddNewImages(Long adId, String userId, Flux<FilePart> newImages) {
-        log.info("=== ADDING NEW IMAGES === AdID: {} ===", adId);
-
-        return validateImagesFirst(newImages)
-                .flatMap(imageList -> {
-                    if (imageList.isEmpty()) {
-                        return Mono.empty();
-                    }
-
-                    return adImageRepository.countByAdId(adId)
-                            .flatMap(existingCount -> {
-                                int totalCount = existingCount.intValue() + imageList.size();
-                                if (totalCount > MAX_IMAGES_ALLOWED) {
-                                    return Mono.error(new InvalidFieldValueException("images",
-                                            "Total images would exceed maximum of " + MAX_IMAGES_ALLOWED +
-                                                    " (existing: " + existingCount + ", adding: " + imageList.size() + ")"));
-                                }
-
-                                return validateUserOwnsAdImages(adId, userId)
-                                        .then(uploadNewImages(adId, userId, imageList));
-                            });
-                });
-    }
+//    private Mono<Void> validateAndAddNewImages(Long adId, String userId, Flux<FilePart> newImages) {
+//        log.info("=== ADDING NEW IMAGES === AdID: {} ===", adId);
+//
+//        return validateImagesFirst(newImages)
+//                .flatMap(imageList -> {
+//                    if (imageList.isEmpty()) {
+//                        return Mono.empty();
+//                    }
+//
+//                    return adImageRepository.countByAdId(adId)
+//                            .flatMap(existingCount -> {
+//                                int totalCount = existingCount.intValue() + imageList.size();
+//                                if (totalCount > MAX_IMAGES_ALLOWED) {
+//                                    return Mono.error(new InvalidFieldValueException("images",
+//                                            "Total images would exceed maximum of " + MAX_IMAGES_ALLOWED +
+//                                                    " (existing: " + existingCount + ", adding: " + imageList.size() + ")"));
+//                                }
+//
+//                                return validateUserOwnsAdImages(adId, userId)
+//                                        .then(uploadNewImages(adId, userId, imageList));
+//                            });
+//                });
+//    }
 
     private Mono<Void> validateUserOwnsAdImages(Long adId, String userId) {
         return adRepository.findById(adId)
@@ -835,12 +836,12 @@ public class BoatMarketplaceService {
                 return partsSpecRepository.deleteByAdId(adId);
             case SERVICES:
                 return servicesSpecRepository.deleteByAdId(adId);
-            case WATER_SPORTS:                                         // NEW
-                return waterSportsSpecRepository.deleteByAdId(adId);   // NEW
-            case MARINE_ACCESSORIES:                                        // NEW
-                return marineAccessoriesSpecRepository.deleteByAdId(adId);  // NEW
-            case RENTALS:                                              // NEW
-                return rentalsSpecRepository.deleteByAdId(adId);       // NEW
+            case WATER_SPORTS:
+                return waterSportsSpecRepository.deleteByAdId(adId);
+            case MARINE_ACCESSORIES:
+                return marineAccessoriesSpecRepository.deleteByAdId(adId);
+            case RENTALS:
+                return rentalsSpecRepository.deleteByAdId(adId);
             default:
                 return Mono.empty();
         }
@@ -948,7 +949,8 @@ public class BoatMarketplaceService {
                 .priceAmount(request.getPrice() != null ? request.getPrice().getAmount() : null)
                 .priceType(request.getPrice() != null ? request.getPrice().getType().name() : null)
                 .includingVat(request.getPrice() != null ? request.getPrice().getIncludingVat() : null)
-                .location(request.getLocation())
+                .location1(request.getLocation1())
+                .location2(request.getLocation2())
                 .adType(request.getAdType().name())
                 .userEmail(userInfo.getEmail())
                 .userId(userInfo.getUserId())
@@ -1101,12 +1103,12 @@ public class BoatMarketplaceService {
                 return validatePartsSpecificationAsync(request.getPartsSpec());
             case SERVICES:
                 return validateServicesSpecificationAsync(request.getServicesSpec());
-            case WATER_SPORTS:                                                              // NEW
-                return validateWaterSportsSpecificationAsync(request.getWaterSportsSpec()); // NEW
-            case MARINE_ACCESSORIES:                                                             // NEW
-                return validateMarineAccessoriesSpecificationAsync(request.getMarineAccessoriesSpec()); // NEW
-            case RENTALS:                                                               // NEW
-                return validateRentalsSpecificationAsync(request.getRentalsSpec());     // NEW
+            case WATER_SPORTS:
+                return validateWaterSportsSpecificationAsync(request.getWaterSportsSpec());
+            case MARINE_ACCESSORIES:
+                return validateMarineAccessoriesSpecificationAsync(request.getMarineAccessoriesSpec());
+            case RENTALS:
+                return validateRentalsSpecificationAsync(request.getRentalsSpec());
             default:
                 log.error("=== UNSUPPORTED CATEGORY === Category: {} ===", request.getCategory());
                 return Mono.error(new CategoryMismatchException(request.getCategory().name(), "UNSUPPORTED"));
@@ -1211,14 +1213,87 @@ public class BoatMarketplaceService {
         if (spec.getConsoleTypes() == null || spec.getConsoleTypes().isEmpty()) {
             return Mono.error(new MandatoryFieldMissingException("consoleTypes", "BOATS_AND_YACHTS"));
         }
-        // ... rest of existing validations remain the same
 
-        String boatCategory = mapBoatTypeToCategory(spec.getType());
-        return brandService.validateBrand(spec.getBrand(), boatCategory)
-                .filter(Boolean::booleanValue)
-                .switchIfEmpty(Mono.error(new InvalidFieldValueException("brand",
-                        "Brand '" + spec.getBrand() + "' is not valid for category '" + boatCategory + "'")))
-                .then();
+        // Engine type validation
+        if (spec.getEngineType() == null) {
+            return Mono.error(new MandatoryFieldMissingException("engineType", "BOATS_AND_YACHTS"));
+        }
+
+        // Engine included validation
+        if (spec.getEngineIncluded() == null) {
+            return Mono.error(new MandatoryFieldMissingException("engineIncluded", "BOATS_AND_YACHTS"));
+        }
+
+        // Horsepower validation
+        if (spec.getHorsepower() == null) {
+            return Mono.error(new MandatoryFieldMissingException("horsepower", "BOATS_AND_YACHTS"));
+        }
+
+        // Dimensions validations
+        if (spec.getLength() == null) {
+            return Mono.error(new MandatoryFieldMissingException("length", "BOATS_AND_YACHTS"));
+        }
+        if (spec.getWidth() == null) {
+            return Mono.error(new MandatoryFieldMissingException("width", "BOATS_AND_YACHTS"));
+        }
+
+        // Max people validation
+        if (spec.getMaxPeople() == null) {
+            return Mono.error(new MandatoryFieldMissingException("maxPeople", "BOATS_AND_YACHTS"));
+        }
+
+        // Year validation
+        if (spec.getYear() == null) {
+            return Mono.error(new MandatoryFieldMissingException("year", "BOATS_AND_YACHTS"));
+        }
+        if (spec.getYear() < 1900 || spec.getYear() > LocalDate.now().getYear() + 5) {
+            return Mono.error(new InvalidFieldValueException("year",
+                    "Year must be between 1900 and " + (LocalDate.now().getYear() + 5)));
+        }
+
+        // Warranty validation
+        if (spec.getInWarranty() == null) {
+            return Mono.error(new MandatoryFieldMissingException("inWarranty", "BOATS_AND_YACHTS"));
+        }
+
+        // Weight validation
+        if (spec.getWeight() == null) {
+            return Mono.error(new MandatoryFieldMissingException("weight", "BOATS_AND_YACHTS"));
+        }
+
+        // Water tank validation
+        if (spec.getHasWaterTank() == null) {
+            return Mono.error(new MandatoryFieldMissingException("hasWaterTank", "BOATS_AND_YACHTS"));
+        }
+
+        // Auxiliary engine validation
+        if (spec.getHasAuxiliaryEngine() == null) {
+            return Mono.error(new MandatoryFieldMissingException("hasAuxiliaryEngine", "BOATS_AND_YACHTS"));
+        }
+
+        // Registration validation
+        if (spec.getIsRegistered() == null) {
+            return Mono.error(new MandatoryFieldMissingException("isRegistered", "BOATS_AND_YACHTS"));
+        }
+
+        // Condition validation
+        if (spec.getCondition() == null) {
+            return Mono.error(new MandatoryFieldMissingException("condition", "BOATS_AND_YACHTS"));
+        }
+
+        return Mono.zip(
+                        brandService.validateBrand(spec.getBrand(), "MOTOR_BOATS").defaultIfEmpty(false),
+                        brandService.validateBrand(spec.getBrand(), "SAILBOATS").defaultIfEmpty(false),
+                        brandService.validateBrand(spec.getBrand(), "KAYAKS").defaultIfEmpty(false)
+                )
+                .flatMap(tuple -> {
+                    boolean validInAnyCategory = tuple.getT1() || tuple.getT2() || tuple.getT3();
+                    if (!validInAnyCategory) {
+                        return Mono.error(new InvalidFieldValueException("brand",
+                                "Brand '" + spec.getBrand() + "' is not valid for boats"));
+                    }
+                    return Mono.empty();
+                });
     }
 
     private Mono<Void> validateJetSkiSpecificationAsync(JetSkiSpecificationDto spec) {
@@ -1458,25 +1533,6 @@ public class BoatMarketplaceService {
             return Mono.error(new MandatoryFieldMissingException("address", "SERVICES"));
         }
         return Mono.empty();
-    }
-
-    private String mapBoatTypeToCategory(BoatSpecificationDto.BoatType boatType) {
-        switch (boatType) {
-            case MOTOR_BOAT:
-            case MOTOR_YACHT:
-            case INFLATABLE_BOAT:
-            case SHIP:
-            case PONTOON:
-                return "MOTOR_BOATS";
-            case SAILING_BOAT:
-            case SAILING_YACHT:
-                return "SAILBOATS";
-            case CANOE:
-                return "KAYAKS";
-            case ALL:
-            default:
-                return "MOTOR_BOATS";
-        }
     }
 
     private Mono<Void> createCategorySpecification(Ad ad, BoatAdRequest request) {
@@ -1795,7 +1851,8 @@ public class BoatMarketplaceService {
                         .type(PriceInfo.PriceType.valueOf(ad.getPriceType()))
                         .includingVat(ad.getIncludingVat())
                         .build() : null)
-                .location(ad.getLocation())
+                .location1(ad.getLocation1())
+                .location2(ad.getLocation2())
                 .adType(AdType.valueOf(ad.getAdType()))
                 .userEmail(ad.getUserEmail())
                 .userId(ad.getUserId())

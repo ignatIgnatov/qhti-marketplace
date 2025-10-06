@@ -22,7 +22,8 @@ public class BoatAdResponse {
 //    private String quickDescription;
     private MainBoatCategory category;
     private PriceInfo price;
-    private String location;
+    private String location1;
+    private String location2;
     private AdType adType;
     private String userEmail;
     private String userId;

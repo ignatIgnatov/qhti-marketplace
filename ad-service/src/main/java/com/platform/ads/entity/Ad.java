@@ -25,7 +25,8 @@ public class Ad {
     private BigDecimal priceAmount;
     private String priceType;
     private Boolean includingVat;
-    private String location;
+    private String location1;
+    private String location2;
     private String adType;
     private String userEmail;
     private String userId;
