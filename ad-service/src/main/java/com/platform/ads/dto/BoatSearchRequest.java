@@ -19,13 +19,27 @@ public class BoatSearchRequest {
     private AdType adType;
     private String sortBy;
 
-    // Category-specific search criteria can be added here
-    // For example:
+    // Common fields for multiple categories
     private String brand;
     private String model;
     private Integer minYear;
     private Integer maxYear;
     private String condition;
+
+    // BOAT-SPECIFIC FIELDS
+    private BoatSpecificationDto.BoatType boatType;
+    private BigDecimal minLength;
+    private BigDecimal maxLength;
+    private BigDecimal minWidth;
+    private BigDecimal maxWidth;
+    private Integer minHorsepower;
+    private Integer maxHorsepower;
+    private BoatSpecificationDto.EngineType engineType;
+    private Boolean engineIncluded;
+    private BoatSpecificationDto.FuelType fuelType;
+    private BoatSpecificationDto.MaterialType material;
+    private Boolean isRegistered;
+    private Boolean inWarranty;
 
     // Marine Electronics specific
     private String electronicsType;
@@ -45,24 +59,17 @@ public class BoatSearchRequest {
     private Boolean authorizedService;
     private String supportedBrand;
 
-    // ADD NEW FIELDS FOR WATER SPORTS
+    // Water Sports specific
     private String waterSportsType;
 
-    // ADD NEW FIELDS FOR MARINE ACCESSORIES
+    // Marine Accessories specific
     private String accessoryType;
 
-    // ADD NEW FIELDS FOR RENTALS
+    // Rentals specific
     private String rentalType;
     private Boolean licenseRequired;
     private String managementType;
-    private String serviceTypeRentals; // To differentiate from services serviceType
+    private String serviceTypeRentals;
     private String companyName;
     private Integer numberOfPeople;
-
-    // Additional common filters that might be useful
-    private Boolean inWarranty;
-    private Boolean isRegistered;
-    private String engineType;
-    private Integer minHorsepower;
-    private Integer maxHorsepower;
 }

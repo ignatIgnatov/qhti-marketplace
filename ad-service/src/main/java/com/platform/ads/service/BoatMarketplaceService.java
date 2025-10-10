@@ -1281,19 +1281,12 @@ public class BoatMarketplaceService {
             return Mono.error(new MandatoryFieldMissingException("condition", "BOATS_AND_YACHTS"));
         }
 
-        return Mono.zip(
-                        brandService.validateBrand(spec.getBrand(), "MOTOR_BOATS").defaultIfEmpty(false),
-                        brandService.validateBrand(spec.getBrand(), "SAILBOATS").defaultIfEmpty(false),
-                        brandService.validateBrand(spec.getBrand(), "KAYAKS").defaultIfEmpty(false)
-                )
-                .flatMap(tuple -> {
-                    boolean validInAnyCategory = tuple.getT1() || tuple.getT2() || tuple.getT3();
-                    if (!validInAnyCategory) {
-                        return Mono.error(new InvalidFieldValueException("brand",
-                                "Brand '" + spec.getBrand() + "' is not valid for boats"));
-                    }
-                    return Mono.empty();
-                });
+        String boatCategory = mapBoatTypeToCategory(spec.getType());
+        return brandService.validateBrand(spec.getBrand(), boatCategory)
+                .filter(Boolean::booleanValue)
+                .switchIfEmpty(Mono.error(new InvalidFieldValueException("brand",
+                        "Brand '" + spec.getBrand() + "' is not valid for category '" + boatCategory + "'")))
+                .then();
     }
 
     private Mono<Void> validateJetSkiSpecificationAsync(JetSkiSpecificationDto spec) {
@@ -1533,6 +1526,25 @@ public class BoatMarketplaceService {
             return Mono.error(new MandatoryFieldMissingException("address", "SERVICES"));
         }
         return Mono.empty();
+    }
+
+    private String mapBoatTypeToCategory(BoatSpecificationDto.BoatType boatType) {
+        switch (boatType) {
+            case MOTOR_BOAT:
+            case MOTOR_YACHT:
+            case INFLATABLE_BOAT:
+            case SHIP:
+            case PONTOON:
+                return "MOTOR_BOATS";
+            case SAILING_BOAT:
+            case SAILING_YACHT:
+                return "SAILBOATS";
+            case CANOE:
+                return "KAYAKS";
+            case ALL:
+            default:
+                return "MOTOR_BOATS";
+        }
     }
 
     private Mono<Void> createCategorySpecification(Ad ad, BoatAdRequest request) {
